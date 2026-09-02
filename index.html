@@ -13,9 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <script>
-    tailwind.config = {
-      theme: { extend: { colors: { ntpc: { blue: '#0066b3', navy: '#06163a', orange: '#ea580c' } }, fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] } } }
-    };
+    tailwind.config = { theme: { extend: { colors: { ntpc: { blue: '#0066b3', navy: '#06163a', orange: '#ea580c' } }, fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] } } } };
   </script>
 
   <style>
@@ -38,7 +36,7 @@
       th { background-color: #f1f5f9 !important; color: #000 !important; font-weight: bold; border: 1px solid #94a3b8; padding: 6px; font-size: 10px; }
       td { border: 1px solid #94a3b8; padding: 6px; font-size: 9.5px; }
       .print-header-box { text-align: center; border-bottom: 2px solid #0066b3; padding-bottom: 6px; margin-bottom: 10px; }
-      .print-title { color: #0066b3; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin: 0; text-transform: uppercase; }
+      .print-title { color: #0066b3; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin: 0; text-transform: uppercase;}
       .print-subtitle { font-size: 11px; font-style: italic; font-weight: bold; margin-top: 2px; color: #334155; }
       .header-gradient-line { height: 2px; background: linear-gradient(to right, #0066b3 0%, #85b86b 50%, #ea580c 100%); margin: 4px auto; width: 80%; }
     }
@@ -51,15 +49,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-
-    const safeStorage = {
-      get: (key) => {
-        try { return localStorage.getItem(key); } catch (e) { return null; }
-      },
-      set: (key, val) => {
-        try { localStorage.setItem(key, val); } catch (e) {}
-      }
-    };
+    const STORAGE_KEY = "ntpc_wrm_projector_v7";
 
     const cleanDate = (val) => {
       if (!val) return "";
@@ -71,84 +61,6 @@
         if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
       }
       return val;
-    };
-
-    const DelayTracker = ({ title, tasks, discipline, l2Schedule }) => {
-      const delayedTasks = (tasks || []).map(t => {
-        if (!t.l2Ref) return null;
-        const l2 = (l2Schedule || []).find(l => l.desc === t.l2Ref && l.discipline === discipline);
-        if (!l2) return null;
-        const endL2 = l2.l2End ? new Date(l2.l2End) : null;
-        const endAct = l2.actEnd ? new Date(l2.actEnd) : null;
-        const startL2 = l2.l2Start ? new Date(l2.l2Start) : null;
-        const startAct = l2.actStart ? new Date(l2.actStart) : null;
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
-        let delayType = null, targetDisplay = "", actualDisplay = "";
-
-        if (endL2) {
-          endL2.setHours(0,0,0,0);
-          if (endAct) {
-            endAct.setHours(0,0,0,0);
-            if (endAct > endL2) { delayType = "Finish Delayed"; targetDisplay = l2.l2End; actualDisplay = l2.actEnd; }
-          } else if (today > endL2) {
-            delayType = "Finish Overdue"; targetDisplay = l2.l2End; actualDisplay = "Incomplete";
-          }
-        }
-        if (!delayType && startL2) {
-          startL2.setHours(0,0,0,0);
-          if (startAct) {
-            startAct.setHours(0,0,0,0);
-            if (startAct > startL2) { delayType = "Start Delayed"; targetDisplay = l2.l2Start; actualDisplay = l2.actStart; }
-          } else if (today > startL2) {
-            delayType = "Start Overdue"; targetDisplay = l2.l2Start; actualDisplay = "Not Started";
-          }
-        }
-        if (!delayType) return null;
-
-        return { taskName: t.taskName, l2Ref: t.l2Ref, targetDisplay, actualDisplay, hindrance: t.hindrance || "No specific hindrance documented", delayType };
-      }).filter(Boolean);
-
-      if (delayedTasks.length === 0) {
-        return (
-          <div className="mt-3 p-2.5 border border-emerald-200 bg-emerald-50/50 rounded-xl flex items-center justify-between">
-            <h4 className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{title}</h4>
-            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">✓ Work Fronts On Schedule</span>
-          </div>
-        );
-      }
-
-      return (
-        <div className="mt-3 border border-rose-200 bg-white rounded-xl overflow-hidden shadow-sm">
-          <div className="bg-rose-50 px-3.5 py-1.5 border-b border-rose-200 flex justify-between items-center">
-            <h4 className="text-[11px] font-black uppercase tracking-wider text-rose-800">{title} Schedule Slips</h4>
-            <span className="text-[9px] font-bold text-rose-600 bg-rose-200 px-2 py-0.5 rounded-full">{delayedTasks.length} Fronts Impacted</span>
-          </div>
-          <table className="w-full text-left text-[10px]">
-            <thead className="bg-rose-50/50">
-              <tr className="text-rose-900/70 uppercase">
-                <th className="py-1 px-3 w-[15%]">Slip Nature</th>
-                <th className="py-1 px-3 w-[25%]">Work Front & Task</th>
-                <th className="py-1 px-3 w-[12%]">Target</th>
-                <th className="py-1 px-3 w-[13%] text-rose-600">Actual/Status</th>
-                <th className="py-1 px-3 w-[35%]">Primary Hindrance Cause</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-rose-100">
-              {delayedTasks.map((d, i) => (
-                <tr key={i} className="text-rose-950 font-bold hover:bg-rose-50/30">
-                  <td className="py-1.5 px-3"><span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px]">{d.delayType}</span></td>
-                  <td className="py-1.5 px-3"><strong>{d.l2Ref}</strong><br/><span className="text-slate-500">{d.taskName}</span></td>
-                  <td className="py-1.5 px-3 text-slate-600">{d.targetDisplay}</td>
-                  <td className="py-1.5 px-3"><span className="text-white bg-rose-600 px-2 py-0.5 rounded text-[9px]">{d.actualDisplay}</span></td>
-                  <td className="py-1.5 px-3 text-rose-800">{d.hindrance}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
     };
 
     const DEFAULT_DB = {
@@ -164,8 +76,32 @@
       l2Schedule: [], civilExecution: [], mechExecution: [], elecExecution: [], drawings: [], safetyLogs: [], qualityLogs: [], actions: []
     };
 
+    const sanitizeDB = (data) => {
+      if (!data || typeof data !== 'object') return DEFAULT_DB;
+      return {
+        currentWeek: data.currentWeek || 35,
+        weeks: Array.isArray(data.weeks) ? data.weeks : [35],
+        weekMeta: data.weekMeta || DEFAULT_DB.weekMeta,
+        teamMaster: Array.isArray(data.teamMaster) ? data.teamMaster : [],
+        l2Schedule: Array.isArray(data.l2Schedule) ? data.l2Schedule : [],
+        civilExecution: Array.isArray(data.civilExecution) ? data.civilExecution : [],
+        mechExecution: Array.isArray(data.mechExecution) ? data.mechExecution : [],
+        elecExecution: Array.isArray(data.elecExecution) ? data.elecExecution : [],
+        drawings: Array.isArray(data.drawings) ? data.drawings : [],
+        safetyLogs: Array.isArray(data.safetyLogs) ? data.safetyLogs : [],
+        qualityLogs: Array.isArray(data.qualityLogs) ? data.qualityLogs : [],
+        actions: Array.isArray(data.actions) ? data.actions : []
+      };
+    };
+
     function App() {
-      const [db, setDbState] = useState(DEFAULT_DB);
+      const [db, setDbState] = useState(() => {
+        try {
+          const local = localStorage.getItem(STORAGE_KEY);
+          return local ? sanitizeDB(JSON.parse(local)) : DEFAULT_DB;
+        } catch(e) { return DEFAULT_DB; }
+      });
+      
       const [cloudStatus, setCloudStatus] = useState("Connecting to Cloud...");
       const [history, setHistory] = useState([]);
 
@@ -174,25 +110,21 @@
         fetch(FIREBASE_URL)
           .then(res => res.json())
           .then(data => {
-            if (data && data.weeks) {
-              setDbState(data);
+            if (data && Array.isArray(data.weeks)) {
+              setDbState(sanitizeDB(data));
               setCloudStatus("Cloud Synced (<80ms)");
             } else {
               saveToCloud(DEFAULT_DB);
             }
           })
           .catch(err => {
-            console.error("Cloud fetch error:", err);
+            console.error("Cloud error:", err);
             setCloudStatus("Cloud Offline (Using Local)");
-            const local = safeStorage.get("ntpc_local_fallback");
-            if (local) {
-              try { setDbState(JSON.parse(local)); } catch (e) {}
-            }
           });
       }, []);
 
       const saveToCloud = (dataToSave) => {
-        safeStorage.set("ntpc_local_fallback", JSON.stringify(dataToSave));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
         setCloudStatus("Saving to Cloud...");
         fetch(FIREBASE_URL, {
           method: "PUT",
@@ -200,12 +132,12 @@
           body: JSON.stringify(dataToSave)
         })
         .then(() => setCloudStatus("Cloud Synced (<80ms)"))
-        .catch(err => setCloudStatus("Sync Failed (Saved Locally)"));
+        .catch(() => setCloudStatus("Sync Failed (Saved Locally)"));
       };
 
       const setDb = (updater) => {
         setDbState(prev => {
-          const nextState = typeof updater === 'function' ? updater(prev) : updater;
+          const nextState = sanitizeDB(typeof updater === 'function' ? updater(prev) : updater);
           setHistory(h => [...h.slice(-14), prev]);
           saveToCloud(nextState);
           return nextState;
@@ -225,10 +157,10 @@
         if(!confirm("WARNING: This will delete ALL rows added within the last 2 hours. Proceed?")) return;
         const threshold = Date.now() - (2 * 60 * 60 * 1000); 
         setDb(prev => {
-          const roll = (arr) => arr.filter(item => !item.createdAt || item.createdAt <= threshold);
+          const roll = (arr) => (arr||[]).filter(item => !item.createdAt || item.createdAt <= threshold);
           return {
             ...prev,
-            l2Schedule: roll(prev.l2Schedule), civilExecution: roll(prev.civilExecution), mechExecution: roll(prev.mechExecution), elecExecution: roll(prev.elecExecution),
+            teamMaster: roll(prev.teamMaster), l2Schedule: roll(prev.l2Schedule), civilExecution: roll(prev.civilExecution), mechExecution: roll(prev.mechExecution), elecExecution: roll(prev.elecExecution),
             drawings: roll(prev.drawings), safetyLogs: roll(prev.safetyLogs), qualityLogs: roll(prev.qualityLogs), actions: roll(prev.actions)
           };
         });
@@ -246,6 +178,11 @@
 
       const [showPrintModal, setShowPrintModal] = useState(false);
       const [printIncludeDashboard, setPrintIncludeDashboard] = useState(true);
+
+      // Photo Upload Modal States
+      const [showLogModal, setShowLogModal] = useState(false);
+      const [logForm, setLogForm] = useState({ type: "Safety", category: "Unsafe Condition", desc: "", file: null });
+      const [viewImage, setViewImage] = useState(null);
 
       useEffect(() => { setSelectedIds([]); }, [tab, activeDiscipline]);
 
@@ -283,7 +220,7 @@
         reader.onload = (event) => {
           try {
             const parsed = JSON.parse(event.target.result);
-            if (parsed.weekMeta) { setDbState(parsed); setWeekNo(parsed.currentWeek || 35); alert("Data restored and uploaded to Cloud successfully."); } 
+            if (parsed.weekMeta) { setDbState(sanitizeDB(parsed)); setWeekNo(parsed.currentWeek || 35); alert("Data restored and uploaded to Cloud successfully."); } 
             else { alert("Invalid backup file format"); }
           } catch(err) { alert("Error parsing file: " + err.message); }
         };
@@ -310,7 +247,10 @@
         const rows = pasteText.trim().split("\n").map(r => r.split("\t"));
         const ts = Date.now();
 
-        if (pasteType === "L2") {
+        if (pasteType === "Team") {
+          const newTeam = rows.map((r, i) => ({ id: "TM-" + ts + i, empId: (r[0] || "").trim(), name: (r[1] || "").trim(), desig: (r[2] || "").trim(), dept: (r[3] || "").trim(), org: (r[4] || "NTPC").trim(), createdAt: ts })).filter(item => item.name);
+          setDb(prev => ({ ...prev, teamMaster: [...newTeam, ...prev.teamMaster] }));
+        } else if (pasteType === "L2") {
           const newFronts = rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), l2Start: cleanDate(r[2]), actStart: cleanDate(r[3]), l2End: cleanDate(r[4]), actEnd: cleanDate(r[5]), createdAt: ts })).filter(item => item.desc);
           setDb(prev => ({ ...prev, l2Schedule: [...newFronts, ...prev.l2Schedule] }));
         } else if (pasteType === "Drawings") {
@@ -358,6 +298,30 @@
         }
       };
 
+      // Photo Upload Log Handler
+      const handleSaveLog = () => {
+        if (!logForm.desc) return alert("Please enter an observation description.");
+        const ts = Date.now();
+        
+        const executeSave = (base64Image) => {
+          const collection = logForm.type === "Safety" ? "safetyLogs" : "qualityLogs";
+          const prefix = logForm.type === "Safety" ? "SAF-" : "QAL-";
+          const newEntry = { id: prefix + ts, weekNo, category: logForm.category, desc: logForm.desc, status: "Open", photoUrl: base64Image || "", createdAt: ts };
+          
+          setDb(prev => ({ ...prev, [collection]: [newEntry, ...prev[collection]] }));
+          setShowLogModal(false);
+          setLogForm({ type: "Safety", category: "Unsafe Condition", desc: "", file: null });
+        };
+
+        if (logForm.file) {
+          const reader = new FileReader();
+          reader.onload = () => executeSave(reader.result);
+          reader.readAsDataURL(logForm.file);
+        } else {
+          executeSave("");
+        }
+      };
+
       const renderTeamDropdown = (orgFilter) => {
         const orgTeam = db.teamMaster.filter(t => t.org === orgFilter && t.name);
         const topLevel = orgTeam.filter(t => { const d = (t.desig||"").toUpperCase(); return d.includes('HOP') || d.includes('GM PROJECT'); });
@@ -381,7 +345,7 @@
       const civilWk = db.civilExecution.filter(t => t.weekNo === weekNo);
       const mechWk = db.mechExecution.filter(t => t.weekNo === weekNo);
       const elecWk = db.elecExecution.filter(t => t.weekNo === weekNo);
-      const pendingDwgs = db.drawings.filter(d => d.weekNo === weekNo && d.status !== "Cat-1 Approved").length;
+      const pendingDwgs = db.drawings.filter(d => d.weekNo === weekNo && !d.status.includes("Approved")).length;
       const openActs = db.actions.filter(a => a.weekNo === weekNo && a.status !== "Completed").length;
       const openHse = db.safetyLogs.filter(s => s.weekNo === weekNo && s.status === "Open" && s.category === "Unsafe Condition").length;
 
@@ -444,8 +408,9 @@
                   if(nx && !db.weeks.includes(nx)) {
                     setDb(prev => {
                       const roll = (arr) => arr.filter(t => t.weekNo === weekNo && t.milestone !== "Completed").map(t => ({ ...t, id: t.id.split('-')[0]+"-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, plan: parseFloat(t.next)||0, act: 0, next: 0, cumBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), prevBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), hindrance: "", tplRemarks: "", ntpcDirectives: "", createdAt: Date.now() }));
-                      const rollD = prev.drawings.filter(d => d.weekNo === weekNo && d.status !== "Cat-1 Approved").map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
+                      const rollD = prev.drawings.filter(d => d.weekNo === weekNo && !d.status.includes("Approved")).map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
                       const rollA = prev.actions.filter(a => a.weekNo === weekNo && a.status !== "Completed").map(a => ({...a, id: "ACT-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
+                      
                       return {
                         ...prev, currentWeek: nx, weeks: [nx, ...prev.weeks],
                         weekMeta: { ...prev.weekMeta, [nx]: prev.weekMeta[weekNo] },
@@ -487,7 +452,10 @@
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
                       <h2 className="text-sm font-black text-ntpc-blue uppercase tracking-wider">Project Team Master List</h2>
-                      <button onClick={() => handleAddRow("Team")} className="bg-ntpc-orange text-white px-4 py-2 rounded-lg text-xs font-black uppercase">+ Add Member</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setPasteType("Team"); setShowPasteModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase shadow">📋 Paste from Excel</button>
+                        <button onClick={() => handleAddRow("Team")} className="bg-ntpc-orange text-white px-4 py-2 rounded-lg text-xs font-black uppercase">+ Add Member</button>
+                      </div>
                     </div>
                     <table className="w-full text-left text-sm">
                       <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.teamMaster.map(x=>x.id))} checked={selectedIds.length===db.teamMaster.length && db.teamMaster.length>0}/></th><th className="p-3 w-[15%]">Emp ID</th><th className="p-3 w-[25%]">Full Name</th><th className="p-3 w-[25%]">Designation</th><th className="p-3 w-[20%]">Department</th><th className="p-3 w-[15%]">Org</th><th className="p-3 w-10"></th></tr></thead>
@@ -495,22 +463,16 @@
                         {db.teamMaster.map((t, i) => (
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
                             <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
-                            <td className="p-2"><input type="text" value={t.empId} onChange={e => { const c=[...db.teamMaster]; c[i].empId=e.target.value; setDb({...db, teamMaster:c}); }} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"/></td>
-                            <td className="p-2"><input type="text" value={t.name} onChange={e => { const c=[...db.teamMaster]; c[i].name=e.target.value; setDb({...db, teamMaster:c}); }} className="w-full bg-transparent border-b p-2 font-bold outline-none"/></td>
-                            <td className="p-2"><input type="text" value={t.desig} onChange={e => { const c=[...db.teamMaster]; c[i].desig=e.target.value; setDb({...db, teamMaster:c}); }} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="e.g. HOP, GM Projects"/></td>
-                            <td className="p-2"><input type="text" value={t.dept} onChange={e => { const c=[...db.teamMaster]; c[i].dept=e.target.value; setDb({...db, teamMaster:c}); }} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="Leave blank for HOP"/></td>
-                            <td className="p-2"><select value={t.org} onChange={e => { const c=[...db.teamMaster]; c[i].org=e.target.value; setDb({...db, teamMaster:c}); }} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"><option>NTPC</option><option>TPL</option></select></td>
+                            <td className="p-2"><input type="text" value={t.empId} onChange={e => handleTaskChange(t.id, "empId", e.target.value, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"/></td>
+                            <td className="p-2"><input type="text" value={t.name} onChange={e => handleTaskChange(t.id, "name", e.target.value, "teamMaster")} className="w-full bg-transparent border-b p-2 font-bold outline-none"/></td>
+                            <td className="p-2"><input type="text" value={t.desig} onChange={e => handleTaskChange(t.id, "desig", e.target.value, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="e.g. HOP, GM Projects"/></td>
+                            <td className="p-2"><input type="text" value={t.dept} onChange={e => handleTaskChange(t.id, "dept", e.target.value, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="Leave blank for HOP"/></td>
+                            <td className="p-2"><select value={t.org} onChange={e => handleTaskChange(t.id, "org", e.target.value, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"><option>NTPC</option><option>TPL</option></select></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual("teamMaster", t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  </div>
-
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">MoM Email Distribution List</h3>
-                    <p className="text-[11px] text-slate-500 font-bold mb-3">These emails will automatically be filled when clicking "Email Team". Separate with commas.</p>
-                    <textarea rows="2" value={currentMeta.distributionList} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, distributionList: e.target.value}}}))} placeholder="e.g. hop@ntpc.co.in, pm@tpl.com" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg font-mono text-xs font-bold outline-none focus:border-ntpc-blue"></textarea>
                   </div>
                 </div>
               )}
@@ -548,36 +510,6 @@
                       </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                      <div className="text-xs font-black text-blue-600 uppercase tracking-wider mb-2">Civil Works Targets</div>
-                      <div className="text-4xl font-black text-slate-800">{getHitCount(civilWk)} <span className="text-lg text-slate-400">/ {civilWk.length} Hit</span></div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                      <div className="text-xs font-black text-amber-500 uppercase tracking-wider mb-2">Mech Works Targets</div>
-                      <div className="text-4xl font-black text-slate-800">{getHitCount(mechWk)} <span className="text-lg text-slate-400">/ {mechWk.length} Hit</span></div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                      <div className="text-xs font-black text-emerald-500 uppercase tracking-wider mb-2">Elec Works Targets</div>
-                      <div className="text-4xl font-black text-slate-800">{getHitCount(elecWk)} <span className="text-lg text-slate-400">/ {elecWk.length} Hit</span></div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Drawings</span><div className="text-3xl font-black text-amber-500 mt-1">{pendingDwgs}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Bottlenecks</span><div className="text-3xl font-black text-rose-600 mt-1">{openActs}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Unsafe Conditions</span><div className="text-3xl font-black text-ntpc-orange mt-1">{openHse}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Site Manpower Deployed</span><div className="text-3xl font-black text-blue-900 mt-1">{currentMeta.manpower}</div></div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Contract L2 Schedule Variance & Obstruction Diagnostics</h3>
-                    <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated baseline target cross-checking</p>
-                    <DelayTracker title="Civil Works" tasks={civilWk} discipline="Civil" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Mechanical Works" tasks={mechWk} discipline="Mechanical" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Electrical Works" tasks={elecWk} discipline="Electrical" l2Schedule={db.l2Schedule} />
-                  </div>
                 </div>
               )}
 
@@ -597,12 +529,12 @@
                       {db.l2Schedule.map((l, i) => (
                         <tr key={l.id} className={`hover:bg-slate-50 ${selectedIds.includes(l.id)?'bg-rose-50':''}`}>
                           <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => toggleSelect(l.id)} className="w-4 h-4 cursor-pointer"/></td>
-                          <td className="p-2"><select value={l.discipline} onChange={e => { const c=[...db.l2Schedule]; c[i].discipline=e.target.value; setDb({...db, l2Schedule:c}); }} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
-                          <td className="p-2"><input type="text" value={l.desc} onChange={e => { const c=[...db.l2Schedule]; c[i].desc=e.target.value; setDb({...db, l2Schedule:c}); }} className="w-full bg-transparent border-b p-2 font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => { const c=[...db.l2Schedule]; c[i].l2Start=e.target.value; setDb({...db, l2Schedule:c}); }} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.actStart} onChange={e => { const c=[...db.l2Schedule]; c[i].actStart=e.target.value; setDb({...db, l2Schedule:c}); }} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => { const c=[...db.l2Schedule]; c[i].l2End=e.target.value; setDb({...db, l2Schedule:c}); }} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => { const c=[...db.l2Schedule]; c[i].actEnd=e.target.value; setDb({...db, l2Schedule:c}); }} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
+                          <td className="p-2"><select value={l.discipline} onChange={e => handleTaskChange(l.id, "discipline", e.target.value, "l2Schedule")} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
+                          <td className="p-2"><input type="text" value={l.desc} onChange={e => handleTaskChange(l.id, "desc", e.target.value, "l2Schedule")} className="w-full bg-transparent border-b p-2 font-bold outline-none" /></td>
+                          <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => handleTaskChange(l.id, "l2Start", e.target.value, "l2Schedule")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
+                          <td className="p-2 text-center"><input type="date" value={l.actStart} onChange={e => handleTaskChange(l.id, "actStart", e.target.value, "l2Schedule")} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
+                          <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => handleTaskChange(l.id, "l2End", e.target.value, "l2Schedule")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
+                          <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => handleTaskChange(l.id, "actEnd", e.target.value, "l2Schedule")} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
                           <td className="p-2 text-center"><button onClick={()=>deleteIndividual("l2Schedule", l.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                         </tr>
                       ))}
@@ -670,7 +602,7 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.drawings.filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===db.drawings.filter(x=>x.weekNo===weekNo).length && db.drawings.filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[12%]">L2 Link</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[12%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.drawings.filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===db.drawings.filter(x=>x.weekNo===weekNo).length && db.drawings.filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[12%]">L2 Link</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[12%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {db.drawings.filter(d => d.weekNo === weekNo).map((d, i) => (
                         <tr key={d.id} className={`hover:bg-slate-50 ${selectedIds.includes(d.id)?'bg-rose-50':''}`}>
@@ -680,7 +612,11 @@
                           <td className="p-2"><input type="text" value={d.desc} onChange={e => handleTaskChange(d.id, "desc", e.target.value, "drawings")} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none" /></td>
                           <td className="p-2"><select value={d.priority} onChange={e => handleTaskChange(d.id, "priority", e.target.value, "drawings")} className={`w-full p-2 rounded text-xs font-black text-center outline-none cursor-pointer ${d.priority === 'High' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}><option>High</option><option>Moderate</option><option>Low</option></select></td>
                           <td className="p-2 text-center"><input type="date" value={d.targetDate} onChange={e => handleTaskChange(d.id, "targetDate", e.target.value, "drawings")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><button onClick={() => { const next = d.status === "Pending" ? "Under Review" : d.status === "Under Review" ? "Cat-1 Approved" : "Pending"; handleTaskChange(d.id, "status", next, "drawings"); }} className={`px-3 py-1.5 rounded text-xs font-black uppercase w-full shadow-sm ${d.status === 'Cat-1 Approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : d.status === 'Under Review' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}`}>{d.status}</button></td>
+                          <td className="p-2 text-center">
+                            <select value={d.status} onChange={e => handleTaskChange(d.id, "status", e.target.value, "drawings")} className={`w-full p-2 rounded text-xs font-black text-center outline-none cursor-pointer shadow-sm ${d.status.includes('Approved') ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : d.status === 'Under Review' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}`}>
+                              <option>Pending</option><option>Under Review</option><option>Cat-1 Approved</option><option>Cat-2 Approved</option><option>Cat-3 Approved</option><option>Cat-4 Approved</option>
+                            </select>
+                          </td>
                           <td className="p-2"><textarea rows="1" value={d.frontImpact} onChange={e => handleTaskChange(d.id, "frontImpact", e.target.value, "drawings")} className="w-full bg-rose-50/50 border border-slate-200 rounded p-2 text-xs font-bold text-rose-950 outline-none" /></td>
                           <td className="p-2"><textarea rows="1" value={d.remarks} onChange={e => handleTaskChange(d.id, "remarks", e.target.value, "drawings")} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs outline-none" /></td>
                           <td className="p-2 text-center"><button onClick={()=>deleteIndividual("drawings", d.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
@@ -711,14 +647,14 @@
                             <tr key={s.id} className={`hover:bg-slate-50 ${selectedIds.includes(s.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2"><input type="text" value={s.category} onChange={e => handleTaskChange(s.id, "category", e.target.value, "safetyLogs")} className="w-full bg-slate-100 p-2 rounded font-bold text-xs outline-none" /></td>
-                              <td className="p-2"><textarea rows="2" value={s.desc} onChange={e => handleTaskChange(s.id, "desc", e.target.value, "safetyLogs")} className="w-full bg-transparent border-b p-2 text-xs font-medium outline-none"></textarea></td>
+                              <td className="p-2"><textarea rows="2" value={s.desc} onChange={e => handleTaskChange(s.id, "desc", e.target.value, "safetyLogs")} className="w-full bg-transparent border-b p-2 text-xs font-medium outline-none"></textarea>{s.photoUrl && <button onClick={() => setViewImage(s.photoUrl)} className="text-[10px] font-bold text-blue-600 underline block mt-1">View Evidence</button>}</td>
                               <td className="p-2 text-center"><button onClick={() => handleTaskChange(s.id, "status", s.status==='Open'?'Complied':'Open', "safetyLogs")} className={`px-2 py-1 rounded text-[10px] font-black uppercase w-full ${s.status === 'Complied' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>{s.status}</button></td>
                               <td className="p-2 text-center"><button onClick={()=>deleteIndividual("safetyLogs", s.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => handleAddRow("Safety")} className="text-xs font-black text-ntpc-orange hover:underline uppercase">+ Add Safety Log</button></div>
+                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => { setLogForm({ type: "Safety", category: "Unsafe Condition", desc: "", file: null }); setShowLogModal(true); }} className="text-xs font-black text-ntpc-orange hover:underline uppercase">+ Log Safety Issue with Photo</button></div>
                     </div>
 
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -730,19 +666,20 @@
                             <tr key={q.id} className={`hover:bg-slate-50 ${selectedIds.includes(q.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => toggleSelect(q.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2"><input type="text" value={q.category} onChange={e => handleTaskChange(q.id, "category", e.target.value, "qualityLogs")} className="w-full bg-slate-100 p-2 rounded font-bold text-xs outline-none" /></td>
-                              <td className="p-2"><textarea rows="2" value={q.desc} onChange={e => handleTaskChange(q.id, "desc", e.target.value, "qualityLogs")} className="w-full bg-transparent border-b p-2 text-xs font-medium outline-none"></textarea></td>
+                              <td className="p-2"><textarea rows="2" value={q.desc} onChange={e => handleTaskChange(q.id, "desc", e.target.value, "qualityLogs")} className="w-full bg-transparent border-b p-2 text-xs font-medium outline-none"></textarea>{q.photoUrl && <button onClick={() => setViewImage(q.photoUrl)} className="text-[10px] font-bold text-blue-600 underline block mt-1">View Evidence</button>}</td>
                               <td className="p-2 text-center"><button onClick={() => handleTaskChange(q.id, "status", q.status==='Open'?'Complied':'Open', "qualityLogs")} className={`px-2 py-1 rounded text-[10px] font-black uppercase w-full ${q.status === 'Complied' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>{q.status}</button></td>
                               <td className="p-2 text-center"><button onClick={()=>deleteIndividual("qualityLogs", q.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => handleAddRow("Quality")} className="text-xs font-black text-blue-600 hover:underline uppercase">+ Add Quality NCR</button></div>
+                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => { setLogForm({ type: "Quality", category: "Civil NCR", desc: "", file: null }); setShowLogModal(true); }} className="text-xs font-black text-blue-600 hover:underline uppercase">+ Log Quality NCR with Photo</button></div>
                     </div>
                   </div>
                 </div>
               )}
 
+              {/* TAB: ACTIONS */}
               {tab === "ACTIONS" && (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden fade-in">
                   <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
@@ -780,7 +717,8 @@
               <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
                 <h3 className="text-sm font-black uppercase text-ntpc-blue">Paste {pasteType} Rows from Excel</h3>
                 <p className="text-[11px] text-slate-500 font-bold">
-                  {pasteType === "L2" ? "Columns: [Discipline | Description | L2 Start | Act Start | L2 End | Act End]" 
+                  {pasteType === "Team" ? "Columns: [Emp ID | Full Name | Designation | Department | Org]"
+                   : pasteType === "L2" ? "Columns: [Discipline | Description | L2 Start | Act Start | L2 End | Act End]" 
                    : pasteType === "Drawings" ? "Columns: [L2 Link | Discipline | Dwg No | Desc | Priority | Target | Expected | Status | Impact | Remarks]"
                    : pasteType === "Actions" ? "Columns: [Category | Description | Resp | Target | Revised | Status | NTPC Remarks]"
                    : "Columns: [L2 Ref | Task Name | Unit | Plan | Actual | Next Plan | Cum Backlog | Hindrance | TPL Remarks | NTPC Directives]"}
@@ -794,17 +732,48 @@
             </div>
           )}
 
+          {/* MODAL: LOG PHOTO UPLOAD */}
+          {showLogModal && (
+            <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
+              <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                <h3 className="text-sm font-black uppercase text-ntpc-blue">Upload Field Observation</h3>
+                <select value={logForm.type} onChange={e => setLogForm({ ...logForm, type: e.target.value, category: e.target.value === "Safety" ? "Unsafe Condition" : "Civil NCR" })} className="w-full border p-2 rounded text-xs font-bold outline-none">
+                  <option value="Safety">Safety Violation</option><option value="Quality">Quality NCR</option>
+                </select>
+                <input type="text" value={logForm.category} onChange={e => setLogForm({ ...logForm, category: e.target.value })} placeholder="Category" className="w-full border p-2 rounded text-xs font-bold outline-none" />
+                <textarea rows="3" value={logForm.desc} onChange={e => setLogForm({ ...logForm, desc: e.target.value })} placeholder="Describe field issue..." className="w-full border p-2 rounded text-xs font-medium outline-none"></textarea>
+                <input type="file" accept="image/*" onChange={e => setLogForm({ ...logForm, file: e.target.files[0] })} className="text-xs font-bold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                <div className="flex gap-2">
+                  <button onClick={() => setShowLogModal(false)} className="flex-1 bg-slate-100 py-2 rounded text-xs font-black uppercase">Cancel</button>
+                  <button onClick={handleSaveLog} className="flex-1 bg-ntpc-orange text-white py-2 rounded text-xs font-black uppercase shadow">Save & Upload</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: IMAGE PREVIEW */}
+          {viewImage && (
+            <div className="fixed inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-4 fade-in">
+              <div className="bg-white p-2 rounded-xl max-w-2xl w-full relative">
+                <button onClick={() => setViewImage(null)} className="absolute -top-10 right-0 text-white text-3xl font-bold">✕</button>
+                <img src={viewImage} className="max-h-[80vh] w-full rounded-lg object-contain" alt="Evidence" />
+              </div>
+            </div>
+          )}
+
           {/* MODAL: PRINT CONFIGURATION */}
           {showPrintModal && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5">
                 <h3 className="text-lg font-black uppercase text-ntpc-blue">Configure Print MoM</h3>
-                
                 <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200">
                   <input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />
                   Include Executive Dashboard Summary
                 </label>
-
+                <div className="bg-rose-50 text-rose-800 border border-rose-200 p-4 rounded-lg text-xs font-bold leading-relaxed">
+                  <span className="text-rose-600 text-sm font-black mb-1 block">⚠️ CRITICAL REMINDER</span>
+                  If working offline, you MUST click <strong className="text-rose-900">Export JSON</strong> in the sidebar to backup your progress before closing!
+                </div>
                 <div className="flex gap-2">
                   <button onClick={() => setShowPrintModal(false)} className="flex-1 bg-slate-100 py-2.5 rounded-lg text-xs font-black uppercase hover:bg-slate-200">Cancel</button>
                   <button onClick={() => { setShowPrintModal(false); setTimeout(() => window.print(), 300); }} className="flex-1 bg-ntpc-blue text-white py-2.5 rounded-lg text-xs font-black uppercase shadow hover:bg-blue-800">Confirm & Print</button>
@@ -813,7 +782,7 @@
             </div>
           )}
 
-          {/* PRINTABLE A4 LANDSCAPE MOM (CLEAN NO LOGO) */}
+          {/* PRINTABLE A4 LANDSCAPE MOM */}
           <div id="printable-mom" className="hidden print:block font-sans bg-white text-black">
             
             <div className="print-header-box">
