@@ -38,7 +38,7 @@
       th { background-color: #f1f5f9 !important; color: #000 !important; font-weight: bold; border: 1px solid #94a3b8; padding: 6px; font-size: 10px; }
       td { border: 1px solid #94a3b8; padding: 6px; font-size: 9.5px; }
       .print-header-box { text-align: center; border-bottom: 2px solid #0066b3; padding-bottom: 6px; margin-bottom: 10px; }
-      .print-title { color: #0066b3; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin: 0; text-transform: uppercase;}
+      .print-title { color: #0066b3; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin: 0; text-transform: uppercase; }
       .print-subtitle { font-size: 11px; font-style: italic; font-weight: bold; margin-top: 2px; color: #334155; }
       .header-gradient-line { height: 2px; background: linear-gradient(to right, #0066b3 0%, #85b86b 50%, #ea580c 100%); margin: 4px auto; width: 80%; }
     }
@@ -50,10 +50,16 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
-    // =========================================================================
-    // YOUR EXACT FIREBASE URL - HARDCODED FOR GUARANTEED SUCCESS
-    // =========================================================================
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
+
+    const safeStorage = {
+      get: (key) => {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+      },
+      set: (key, val) => {
+        try { localStorage.setItem(key, val); } catch (e) {}
+      }
+    };
 
     const cleanDate = (val) => {
       if (!val) return "";
@@ -65,6 +71,84 @@
         if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
       }
       return val;
+    };
+
+    const DelayTracker = ({ title, tasks, discipline, l2Schedule }) => {
+      const delayedTasks = (tasks || []).map(t => {
+        if (!t.l2Ref) return null;
+        const l2 = (l2Schedule || []).find(l => l.desc === t.l2Ref && l.discipline === discipline);
+        if (!l2) return null;
+        const endL2 = l2.l2End ? new Date(l2.l2End) : null;
+        const endAct = l2.actEnd ? new Date(l2.actEnd) : null;
+        const startL2 = l2.l2Start ? new Date(l2.l2Start) : null;
+        const startAct = l2.actStart ? new Date(l2.actStart) : null;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        let delayType = null, targetDisplay = "", actualDisplay = "";
+
+        if (endL2) {
+          endL2.setHours(0,0,0,0);
+          if (endAct) {
+            endAct.setHours(0,0,0,0);
+            if (endAct > endL2) { delayType = "Finish Delayed"; targetDisplay = l2.l2End; actualDisplay = l2.actEnd; }
+          } else if (today > endL2) {
+            delayType = "Finish Overdue"; targetDisplay = l2.l2End; actualDisplay = "Incomplete";
+          }
+        }
+        if (!delayType && startL2) {
+          startL2.setHours(0,0,0,0);
+          if (startAct) {
+            startAct.setHours(0,0,0,0);
+            if (startAct > startL2) { delayType = "Start Delayed"; targetDisplay = l2.l2Start; actualDisplay = l2.actStart; }
+          } else if (today > startL2) {
+            delayType = "Start Overdue"; targetDisplay = l2.l2Start; actualDisplay = "Not Started";
+          }
+        }
+        if (!delayType) return null;
+
+        return { taskName: t.taskName, l2Ref: t.l2Ref, targetDisplay, actualDisplay, hindrance: t.hindrance || "No specific hindrance documented", delayType };
+      }).filter(Boolean);
+
+      if (delayedTasks.length === 0) {
+        return (
+          <div className="mt-3 p-2.5 border border-emerald-200 bg-emerald-50/50 rounded-xl flex items-center justify-between">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{title}</h4>
+            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">✓ Work Fronts On Schedule</span>
+          </div>
+        );
+      }
+
+      return (
+        <div className="mt-3 border border-rose-200 bg-white rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-rose-50 px-3.5 py-1.5 border-b border-rose-200 flex justify-between items-center">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-rose-800">{title} Schedule Slips</h4>
+            <span className="text-[9px] font-bold text-rose-600 bg-rose-200 px-2 py-0.5 rounded-full">{delayedTasks.length} Fronts Impacted</span>
+          </div>
+          <table className="w-full text-left text-[10px]">
+            <thead className="bg-rose-50/50">
+              <tr className="text-rose-900/70 uppercase">
+                <th className="py-1 px-3 w-[15%]">Slip Nature</th>
+                <th className="py-1 px-3 w-[25%]">Work Front & Task</th>
+                <th className="py-1 px-3 w-[12%]">Target</th>
+                <th className="py-1 px-3 w-[13%] text-rose-600">Actual/Status</th>
+                <th className="py-1 px-3 w-[35%]">Primary Hindrance Cause</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-rose-100">
+              {delayedTasks.map((d, i) => (
+                <tr key={i} className="text-rose-950 font-bold hover:bg-rose-50/30">
+                  <td className="py-1.5 px-3"><span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px]">{d.delayType}</span></td>
+                  <td className="py-1.5 px-3"><strong>{d.l2Ref}</strong><br/><span className="text-slate-500">{d.taskName}</span></td>
+                  <td className="py-1.5 px-3 text-slate-600">{d.targetDisplay}</td>
+                  <td className="py-1.5 px-3"><span className="text-white bg-rose-600 px-2 py-0.5 rounded text-[9px]">{d.actualDisplay}</span></td>
+                  <td className="py-1.5 px-3 text-rose-800">{d.hindrance}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
     };
 
     const DEFAULT_DB = {
@@ -85,7 +169,6 @@
       const [cloudStatus, setCloudStatus] = useState("Connecting to Cloud...");
       const [history, setHistory] = useState([]);
 
-      // 1. Initial Cloud Sync
       useEffect(() => {
         setCloudStatus("Fetching Cloud Data...");
         fetch(FIREBASE_URL)
@@ -95,20 +178,21 @@
               setDbState(data);
               setCloudStatus("Cloud Synced (<80ms)");
             } else {
-              saveToCloud(DEFAULT_DB); // Seed new DB
+              saveToCloud(DEFAULT_DB);
             }
           })
           .catch(err => {
             console.error("Cloud fetch error:", err);
             setCloudStatus("Cloud Offline (Using Local)");
-            const local = localStorage.getItem("ntpc_local_fallback");
-            if (local) setDbState(JSON.parse(local));
+            const local = safeStorage.get("ntpc_local_fallback");
+            if (local) {
+              try { setDbState(JSON.parse(local)); } catch (e) {}
+            }
           });
       }, []);
 
-      // 2. Cloud Save Engine
       const saveToCloud = (dataToSave) => {
-        localStorage.setItem("ntpc_local_fallback", JSON.stringify(dataToSave));
+        safeStorage.set("ntpc_local_fallback", JSON.stringify(dataToSave));
         setCloudStatus("Saving to Cloud...");
         fetch(FIREBASE_URL, {
           method: "PUT",
@@ -199,11 +283,8 @@
         reader.onload = (event) => {
           try {
             const parsed = JSON.parse(event.target.result);
-            if (parsed.weekMeta) {
-              setDb(parsed);
-              setWeekNo(parsed.currentWeek || 35);
-              alert("Data restored and uploaded to Cloud successfully.");
-            } else { alert("Invalid backup file format"); }
+            if (parsed.weekMeta) { setDbState(parsed); setWeekNo(parsed.currentWeek || 35); alert("Data restored and uploaded to Cloud successfully."); } 
+            else { alert("Invalid backup file format"); }
           } catch(err) { alert("Error parsing file: " + err.message); }
         };
         reader.readAsText(file);
@@ -365,7 +446,6 @@
                       const roll = (arr) => arr.filter(t => t.weekNo === weekNo && t.milestone !== "Completed").map(t => ({ ...t, id: t.id.split('-')[0]+"-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, plan: parseFloat(t.next)||0, act: 0, next: 0, cumBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), prevBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), hindrance: "", tplRemarks: "", ntpcDirectives: "", createdAt: Date.now() }));
                       const rollD = prev.drawings.filter(d => d.weekNo === weekNo && d.status !== "Cat-1 Approved").map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
                       const rollA = prev.actions.filter(a => a.weekNo === weekNo && a.status !== "Completed").map(a => ({...a, id: "ACT-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
-                      
                       return {
                         ...prev, currentWeek: nx, weeks: [nx, ...prev.weeks],
                         weekMeta: { ...prev.weekMeta, [nx]: prev.weekMeta[weekNo] },
@@ -427,10 +507,9 @@
                     </table>
                   </div>
 
-                  {/* MAILING LIST MANAGER */}
                   <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">MoM Email Distribution List</h3>
-                    <p className="text-[11px] text-slate-500 font-bold mb-3">These emails will be auto-filled when you click "Email Team". Separate emails with commas.</p>
+                    <p className="text-[11px] text-slate-500 font-bold mb-3">These emails will automatically be filled when clicking "Email Team". Separate with commas.</p>
                     <textarea rows="2" value={currentMeta.distributionList} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, distributionList: e.target.value}}}))} placeholder="e.g. hop@ntpc.co.in, pm@tpl.com" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg font-mono text-xs font-bold outline-none focus:border-ntpc-blue"></textarea>
                   </div>
                 </div>
@@ -570,7 +649,7 @@
                             <td className="p-2"><input type="number" value={t.next} onChange={e => handleTaskChange(t.id, "next", e.target.value, col)} className="w-full bg-slate-100 text-center rounded p-2 text-sm font-bold outline-none" /></td>
                             <td className="p-2"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskChange(t.id, "hindrance", e.target.value, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-2 text-xs outline-none font-medium"></textarea></td>
                             <td className="p-2"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskChange(t.id, "tplRemarks", e.target.value, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs outline-none font-medium"></textarea></td>
-                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskChange(t.id, "ntpcDirectives", e.target.value, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-2 text-xs font-bold text-rose-950 outline-none"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskChange(t.id, "ntpcDirectives", e.target.value, col)} className="w-full bg-rose-50/30 border border-slate-200 rounded p-2 text-xs font-bold text-rose-950 outline-none"></textarea></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual(col, t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         );
@@ -639,7 +718,7 @@
                           ))}
                         </tbody>
                       </table>
-                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => setDb(p=>({...p, safetyLogs:[{id:"SAF-"+Date.now(), weekNo, category:"Unsafe Condition", desc:"", status:"Open", createdAt: Date.now()}, ...p.safetyLogs]}))} className="text-xs font-black text-ntpc-orange hover:underline uppercase">+ Add Safety Log</button></div>
+                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => handleAddRow("Safety")} className="text-xs font-black text-ntpc-orange hover:underline uppercase">+ Add Safety Log</button></div>
                     </div>
 
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -658,13 +737,12 @@
                           ))}
                         </tbody>
                       </table>
-                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => setDb(p=>({...p, qualityLogs:[{id:"QAL-"+Date.now(), weekNo, category:"Civil NCR", desc:"", status:"Open", createdAt: Date.now()}, ...p.qualityLogs]}))} className="text-xs font-black text-blue-600 hover:underline uppercase">+ Add Quality NCR</button></div>
+                      <div className="p-3 bg-slate-50 border-t"><button onClick={() => handleAddRow("Quality")} className="text-xs font-black text-blue-600 hover:underline uppercase">+ Add Quality NCR</button></div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* TAB: ACTIONS */}
               {tab === "ACTIONS" && (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden fade-in">
                   <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
@@ -735,9 +813,7 @@
             </div>
           )}
 
-          {/* ========================================================= */}
-          {/* PRINTABLE MINUTES OF MEETING (MoM) — CLEAN NO LOGO FORMAT */}
-          {/* ========================================================= */}
+          {/* PRINTABLE A4 LANDSCAPE MOM (CLEAN NO LOGO) */}
           <div id="printable-mom" className="hidden print:block font-sans bg-white text-black">
             
             <div className="print-header-box">
@@ -751,9 +827,9 @@
               <div className="text-[9px] font-bold text-right uppercase">REF: NTPC/NSTPP-II/WRM/WK-{weekNo}<br />Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
             </div>
 
-            <h3 className="text-[10px] font-bold uppercase mb-1">1. Meeting Participants & Site Performance Index</h3>
+            <h3 className="text-[10px] font-bold uppercase mb-1">1. Meeting Participants & Site Operational Data</h3>
             <table className="mb-4">
-              <thead><tr><th className="w-[35%]">Employer Representatives (NTPC)</th><th className="w-[35%]">Contractor Representatives (M/s TPL)</th><th className="w-[30%] text-center">Site Metrics</th></tr></thead>
+              <thead><tr><th className="w-[35%]">Employer Representatives (NTPC)</th><th className="w-[35%]">Contractor Representatives (M/s TPL)</th><th className="w-[30%] text-center">Site Operational Metrics</th></tr></thead>
               <tbody>
                 <tr>
                   <td className="align-top"><ul className="list-disc pl-4 m-0">{(currentMeta.ntpcAttendees || []).filter(a => a.name).map((a, i) => <li key={i}><strong>{a.name}</strong> — {a.desig}</li>)}</ul></td>
