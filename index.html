@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nabinagar STPP Stage-II — Live WRM Portal</title>
+  <title>Nabinagar STPP Stage-II — Enterprise WRM Portal</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -43,6 +43,8 @@
       .header-gradient-line { height: 3px; background: linear-gradient(to right, #0066b3 0%, #85b86b 50%, #ea580c 100%); margin: 6px auto; width: 80%; }
       h3.section-title { font-size: 14px; font-weight: 800; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 10px; text-transform: uppercase;}
       .photo-box { width: 180px; height: auto; border: 1px solid #cbd5e1; border-radius: 4px; margin-top: 4px; }
+      .print-progress-bar { height: 8px; background: #cbd5e1; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+      .print-progress-fill { height: 100%; background: #0066b3; }
     }
   </style>
 </head>
@@ -53,7 +55,9 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-    const STORAGE_KEY = "ntpc_wrm_projector_v8";
+    const STORAGE_KEY = "ntpc_wrm_projector_v10";
+
+    const STANDARD_CIVIL_TASKS = ["Excavation", "PCC", "RCC", "Backfilling", "Rebar/Steel", "Shuttering", "Brickwork", "Plastering", "Structural Steel Erection"];
 
     const cleanDate = (val) => {
       if (!val) return ""; val = val.trim();
@@ -66,7 +70,6 @@
       return val;
     };
 
-    // Auto-Compressor to prevent browser crashes on huge phone photos
     const compressImage = (file) => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -82,16 +85,70 @@
             canvas.height = img.height * scaleSize;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality compression
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); 
           };
         };
       });
     };
 
+    const getL2DelayStatus = (l) => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      
+      const l2s = l.l2Start ? new Date(l.l2Start) : null; if (l2s) l2s.setHours(0,0,0,0);
+      const actS = l.actStart ? new Date(l.actStart) : null; if (actS) actS.setHours(0,0,0,0);
+      const l2e = l.l2End ? new Date(l.l2End) : null; if (l2e) l2e.setHours(0,0,0,0);
+      const actE = l.actEnd ? new Date(l.actEnd) : null; if (actE) actE.setHours(0,0,0,0);
+
+      let delayType = null;
+      let targetDisplay = "";
+      let actualDisplay = "Missing Actuals";
+
+      if (l2e && !actE && today > l2e) { delayType = "Finish Overdue"; targetDisplay = l.l2End; } 
+      else if (l2e && actE && actE > l2e) { delayType = "Finish Delayed"; targetDisplay = l.l2End; actualDisplay = l.actEnd; } 
+      else if (l2s && !actS && today > l2s) { delayType = "Start Overdue"; targetDisplay = l.l2Start; } 
+      else if (l2s && actS && actS > l2s) { delayType = "Start Delayed"; targetDisplay = l.l2Start; actualDisplay = l.actStart; }
+
+      return { isStartOverdue: (l2s && !actS && today > l2s), isFinishOverdue: (l2e && !actE && today > l2e), delayType, targetDisplay, actualDisplay };
+    };
+
+    const DelayTracker = ({ title, tasks, discipline, l2Schedule }) => {
+      const delayedTasks = (tasks || []).map(t => {
+        if (!t.l2Ref) return null;
+        const l2 = (l2Schedule || []).find(l => l.desc === t.l2Ref && l.discipline === discipline);
+        if (!l2) return null;
+        const status = getL2DelayStatus(l2);
+        if (!status.delayType) return null;
+        return { taskName: t.taskName, l2Ref: t.l2Ref, targetDisplay: status.targetDisplay, actualDisplay: status.actualDisplay, hindrance: t.hindrance || "No specific hindrance documented", delayType: status.delayType };
+      }).filter(Boolean);
+
+      if (delayedTasks.length === 0) return null;
+
+      return (
+        <div className="mt-4 border border-rose-200 bg-white rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-rose-50 px-4 py-2 border-b border-rose-200 flex justify-between items-center"><h4 className="text-[12px] font-black uppercase tracking-wider text-rose-800">{title} Schedule Slips</h4><span className="text-[10px] font-bold text-rose-600 bg-rose-200 px-2 py-0.5 rounded-full">{delayedTasks.length} Fronts Impacted</span></div>
+          <table className="w-full text-left text-[11px]">
+            <thead className="bg-rose-50/50"><tr className="text-rose-900/70 uppercase"><th className="py-2 px-4 w-[15%]">Slip Nature</th><th className="py-2 px-4 w-[25%]">Work Front & Task</th><th className="py-2 px-4 w-[12%]">Target Date</th><th className="py-2 px-4 w-[13%] text-rose-600">Actual/Status</th><th className="py-2 px-4 w-[35%]">Primary Hindrance Cause</th></tr></thead>
+            <tbody className="divide-y divide-rose-100">
+              {delayedTasks.map((d, i) => (
+                <tr key={i} className="text-rose-950 font-bold hover:bg-rose-50/30">
+                  <td className="py-2 px-4"><span className="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px]">{d.delayType}</span></td>
+                  <td className="py-2 px-4"><strong>{d.l2Ref}</strong><br/><span className="text-slate-500">{d.taskName}</span></td>
+                  <td className="py-2 px-4 text-slate-600">{d.targetDisplay}</td>
+                  <td className="py-2 px-4"><span className="text-white bg-rose-600 px-2 py-1 rounded shadow-sm text-[10px]">{d.actualDisplay}</span></td>
+                  <td className="py-2 px-4 text-rose-800">{d.hindrance}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
     const DEFAULT_DB = {
       currentWeek: 35, weeks: [35],
       weekMeta: { "35": { manpower: 450, trained: 380, ntpcAttendees: [], tplAttendees: [], distributionList: "hop@ntpc.co.in, pm@tpl.com" } },
-      teamMaster: [], l2Schedule: [], civilExecution: [], mechExecution: [], elecExecution: [], drawings: [], safetyLogs: [], qualityLogs: [], actions: []
+      teamMaster: [], l2Schedule: [], masterBOQ: [], civilExecution: [], mechExecution: [], elecExecution: [], drawings: [], safetyLogs: [], qualityLogs: [], actions: []
     };
 
     const sanitizeDB = (data) => {
@@ -99,6 +156,7 @@
       return {
         currentWeek: data.currentWeek || 35, weeks: Array.isArray(data.weeks) ? data.weeks : [35], weekMeta: data.weekMeta || DEFAULT_DB.weekMeta,
         teamMaster: Array.isArray(data.teamMaster) ? data.teamMaster : [], l2Schedule: Array.isArray(data.l2Schedule) ? data.l2Schedule : [],
+        masterBOQ: Array.isArray(data.masterBOQ) ? data.masterBOQ : [],
         civilExecution: Array.isArray(data.civilExecution) ? data.civilExecution : [], mechExecution: Array.isArray(data.mechExecution) ? data.mechExecution : [], elecExecution: Array.isArray(data.elecExecution) ? data.elecExecution : [],
         drawings: Array.isArray(data.drawings) ? data.drawings : [], safetyLogs: Array.isArray(data.safetyLogs) ? data.safetyLogs : [], qualityLogs: Array.isArray(data.qualityLogs) ? data.qualityLogs : [], actions: Array.isArray(data.actions) ? data.actions : []
       };
@@ -135,7 +193,7 @@
         const threshold = Date.now() - (2 * 60 * 60 * 1000); 
         setDb(prev => {
           const roll = (arr) => (arr||[]).filter(item => !item.createdAt || item.createdAt <= threshold);
-          return { ...prev, teamMaster: roll(prev.teamMaster), l2Schedule: roll(prev.l2Schedule), civilExecution: roll(prev.civilExecution), mechExecution: roll(prev.mechExecution), elecExecution: roll(prev.elecExecution), drawings: roll(prev.drawings), safetyLogs: roll(prev.safetyLogs), qualityLogs: roll(prev.qualityLogs), actions: roll(prev.actions) };
+          return { ...prev, teamMaster: roll(prev.teamMaster), l2Schedule: roll(prev.l2Schedule), masterBOQ: roll(prev.masterBOQ), civilExecution: roll(prev.civilExecution), mechExecution: roll(prev.mechExecution), elecExecution: roll(prev.elecExecution), drawings: roll(prev.drawings), safetyLogs: roll(prev.safetyLogs), qualityLogs: roll(prev.qualityLogs), actions: roll(prev.actions) };
         });
       };
 
@@ -166,12 +224,35 @@
       const deleteSelected = (collectionName) => { if(!confirm(`Delete ${selectedIds.length} items?`)) return; setDb(prev => ({ ...prev, [collectionName]: prev[collectionName].filter(item => !selectedIds.includes(item.id)) })); setSelectedIds([]); };
       const deleteIndividual = (collectionName, id) => { if(!confirm("Delete this row?")) return; setDb(prev => ({ ...prev, [collectionName]: prev[collectionName].filter(item => item.id !== id) })); };
 
+      const exportBackup = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+        const a = document.createElement('a'); a.setAttribute("href", dataStr); a.setAttribute("download", `NTPC_WRM_Data_Wk${weekNo}.json`);
+        document.body.appendChild(a); a.click(); a.remove();
+      };
+
+      const importBackup = (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const parsed = JSON.parse(event.target.result);
+            if (parsed.weekMeta) { setDbState(sanitizeDB(parsed)); setWeekNo(parsed.currentWeek || 35); alert("Data restored and uploaded to Cloud successfully."); } 
+            else { alert("Invalid backup file format"); }
+          } catch(err) { alert("Error parsing file: " + err.message); }
+        };
+        reader.readAsText(file);
+      };
+
       const exportToExcel = () => {
         const wb = XLSX.utils.book_new();
         const formatExec = (arr) => arr.filter(t => t.weekNo === weekNo).map(t => ({ "L2 Ref": t.l2Ref, "Task": t.taskName, "Unit": t.unit, "Plan": t.plan, "Actual": t.act, "Variance": t.act - t.plan, "Cum. Backlog": t.cumBacklog, "Next Plan": t.next, "Hindrance": t.hindrance, "TPL Remarks": t.tplRemarks, "NTPC Directives": t.ntpcDirectives }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.civilExecution)), "Civil Works");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.mechExecution)), "Mechanical Works");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.elecExecution)), "Electrical Works");
+        
+        const boqData = computedBOQ.map(b => ({ "Discipline": b.discipline, "L2 Ref": b.l2Ref, "Task": b.taskName, "Unit": b.uom, "Total Scope": b.totalScope, "Historical Actual": b.historicalActual, "App Weeks Actual": b.appActuals, "Total Cumulative": b.totalCum, "Balance": b.balance, "% Complete": b.pct + "%" }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(boqData), "Master BOQ Progress");
+
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.drawings.filter(d => d.weekNo === weekNo).map(d => ({ "L2 Ref": d.l2Ref, "Discipline": d.discipline, "Drawing No": d.drawingNo, "Desc": d.desc, "Priority": d.priority, "Target": d.targetDate, "Status": d.status, "Impact": d.frontImpact }))), "Drawings DCI");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.actions.filter(a => a.weekNo === weekNo).map(a => ({ "Category": a.category, "Description": a.desc, "Responsibility": a.responsibility, "Target": a.targetDate, "Status": a.status, "NTPC Remarks": a.ntpcRemarks }))), "Action Tracker");
         XLSX.writeFile(wb, `NTPC_WRM_Week_${weekNo}_Export.xlsx`);
@@ -181,6 +262,7 @@
         if (!pasteText.trim()) return; const rows = pasteText.trim().split("\n").map(r => r.split("\t")); const ts = Date.now();
         if (pasteType === "Team") { setDb(prev => ({ ...prev, teamMaster: [...rows.map((r, i) => ({ id: "TM-" + ts + i, empId: (r[0] || "").trim(), name: (r[1] || "").trim(), desig: (r[2] || "").trim(), dept: (r[3] || "").trim(), org: (r[4] || "NTPC").trim(), createdAt: ts })).filter(item => item.name), ...prev.teamMaster] })); } 
         else if (pasteType === "L2") { setDb(prev => ({ ...prev, l2Schedule: [...rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), l2Start: cleanDate(r[2]), actStart: cleanDate(r[3]), l2End: cleanDate(r[4]), actEnd: cleanDate(r[5]), createdAt: ts })).filter(item => item.desc), ...prev.l2Schedule] })); } 
+        else if (pasteType === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [...rows.map((r, i) => ({ id: "BOQ-" + ts + i, discipline: (r[0] || "Civil").trim(), l2Ref: (r[1] || "").trim(), taskName: (r[2] || "").trim(), uom: (r[3] || "m³").trim(), totalScope: parseFloat(r[4])||0, historicalActual: parseFloat(r[5])||0, createdAt: ts })).filter(item => item.taskName), ...prev.masterBOQ] })); }
         else if (pasteType === "Drawings") { setDb(prev => ({ ...prev, drawings: [...rows.map((r, i) => ({ id: "DW-" + ts + i, weekNo, l2Ref: (r[0] || "").trim(), discipline: (r[1] || "Civil").trim(), drawingNo: (r[2] || "").trim(), desc: (r[3] || "").trim(), priority: (r[4] || "Moderate").trim(), targetDate: cleanDate(r[5]), expectedDate: cleanDate(r[6]), status: (r[7] || "Pending").trim(), frontImpact: (r[8] || "").trim(), remarks: (r[9] || "").trim(), createdAt: ts })).filter(item => item.drawingNo), ...prev.drawings] })); } 
         else if (pasteType === "Actions") { setDb(prev => ({ ...prev, actions: [...rows.map((r, i) => ({ id: "ACT-" + ts + i, weekNo, category: (r[0] || "Execution").trim(), desc: (r[1] || "").trim(), responsibility: (r[2] || "TPL").trim(), targetDate: cleanDate(r[3]), revisedDate: cleanDate(r[4]), status: (r[5] || "Pending").trim(), ntpcRemarks: (r[6] || "").trim(), createdAt: ts })).filter(item => item.desc), ...prev.actions] })); } 
         else {
@@ -192,7 +274,8 @@
       };
 
       const handleTaskChange = (taskId, field, val, collection) => {
-        setDb(prev => ({ ...prev, [collection]: prev[collection].map(item => {
+        setDb(prev => ({
+          ...prev, [collection]: prev[collection].map(item => {
             if (item.id !== taskId) return item;
             const nextItem = { ...item, [field]: val };
             if (field === 'plan' || field === 'act') {
@@ -209,6 +292,7 @@
         const ts = Date.now();
         if (type === "L2") { setDb(prev => ({ ...prev, l2Schedule: [{ id: "L2-"+ts, discipline: "Civil", desc: "", l2Start: "", actStart: "", l2End: "", actEnd: "", createdAt: ts }, ...prev.l2Schedule] })); } 
         else if (type === "Team") { setDb(prev => ({ ...prev, teamMaster: [{ id: "TM-"+ts, empId: "", name: "", desig: "", dept: "", org: "NTPC", createdAt: ts }, ...prev.teamMaster] })); } 
+        else if (type === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [{ id: "BOQ-"+ts, discipline: activeDiscipline, l2Ref: "", taskName: "", uom: activeDiscipline==="Civil"?"m³":"MT", totalScope: 0, historicalActual: 0, createdAt: ts }, ...prev.masterBOQ] })); }
         else if (type === "Drawings") { setDb(prev => ({ ...prev, drawings: [{ id: "DW-"+ts, weekNo, l2Ref: "", discipline: "Civil", drawingNo: "", desc: "", priority: "Moderate", targetDate: "", expectedDate: "", status: "Pending", frontImpact: "", remarks: "", createdAt: ts }, ...prev.drawings] })); } 
         else if (type === "Actions") { setDb(prev => ({ ...prev, actions: [{ id: "ACT-"+ts, weekNo, category: "Execution", desc: "", responsibility: "TPL", targetDate: "", revisedDate: "", status: "Pending", ntpcRemarks: "", createdAt: ts }, ...prev.actions] })); } 
         else {
@@ -223,36 +307,47 @@
         setCloudStatus("Compressing Photo...");
         const ts = Date.now();
         let compressedBase64 = "";
-        
-        if (logForm.file) {
-          compressedBase64 = await compressImage(logForm.file);
-        }
+        if (logForm.file) { compressedBase64 = await compressImage(logForm.file); }
         
         const collection = logForm.type === "Safety" ? "safetyLogs" : "qualityLogs";
         const prefix = logForm.type === "Safety" ? "SAF-" : "QAL-";
         const newEntry = { id: prefix + ts, weekNo, dept: logForm.dept, category: logForm.category, desc: logForm.desc, status: "Open", photoUrl: compressedBase64, createdAt: ts };
         
         setDb(prev => ({ ...prev, [collection]: [newEntry, ...prev[collection]] }));
-        setShowLogModal(false);
-        setLogForm({ type: "Safety", category: "Unsafe Condition", dept: "Civil", desc: "", file: null });
+        setShowLogModal(false); setLogForm({ type: "Safety", category: "Unsafe Condition", dept: "Civil", desc: "", file: null });
         setCloudStatus("Cloud Synced (<80ms)");
       };
 
       const toggleAttendee = (org, id) => {
-        const emp = db.teamMaster.find(t => t.id === id);
-        if (!emp) return;
+        const emp = db.teamMaster.find(t => t.id === id); if (!emp) return;
         setDb(prev => {
           const field = org === 'NTPC' ? 'ntpcAttendees' : 'tplAttendees';
           const currentList = prev.weekMeta[weekNo][field] || [];
           const exists = currentList.find(a => a.id === id);
-          let newList;
-          if (exists) newList = currentList.filter(a => a.id !== id);
-          else newList = [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
+          let newList = exists ? currentList.filter(a => a.id !== id) : [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
           return { ...prev, weekMeta: { ...prev.weekMeta, [weekNo]: { ...prev.weekMeta[weekNo], [field]: newList } } };
         });
       };
 
-      // Dashboard Computations
+      // COMPUTED BOQ LOGIC - The Core Engine for Master Progress
+      const computedBOQ = useMemo(() => {
+        return db.masterBOQ.map(boq => {
+          const relevantExecs = boq.discipline === "Civil" ? db.civilExecution : boq.discipline === "Mechanical" ? db.mechExecution : db.elecExecution;
+          
+          // Sum up actuals across all weeks for the same L2 Ref and Task Name
+          const appActuals = relevantExecs
+            .filter(ex => ex.l2Ref === boq.l2Ref && ex.taskName === boq.taskName)
+            .reduce((sum, ex) => sum + (parseFloat(ex.act) || 0), 0);
+          
+          const totalCum = (parseFloat(boq.historicalActual) || 0) + appActuals;
+          const scope = parseFloat(boq.totalScope) || 0;
+          const balance = Math.max(0, scope - totalCum);
+          const pct = scope > 0 ? Math.min(100, Math.round((totalCum / scope) * 100)) : 0;
+          
+          return { ...boq, appActuals, totalCum, balance, pct };
+        });
+      }, [db.masterBOQ, db.civilExecution, db.mechExecution, db.elecExecution]);
+
       const civilWk = db.civilExecution.filter(t => t.weekNo === weekNo);
       const mechWk = db.mechExecution.filter(t => t.weekNo === weekNo);
       const elecWk = db.elecExecution.filter(t => t.weekNo === weekNo);
@@ -263,32 +358,29 @@
       const openHse = db.safetyLogs.filter(s => s.weekNo === weekNo && s.status === "Open").length;
       const openQal = db.qualityLogs.filter(q => q.weekNo === weekNo && q.status === "Open").length;
 
-      // Smart Date Checking for Dashboard
-      const calculateL2Delays = () => {
-        const today = new Date(); today.setHours(0,0,0,0);
-        let delayedStarts = 0; let delayedFinishes = 0;
-        db.l2Schedule.forEach(l => {
-          const l2s = l.l2Start ? new Date(l.l2Start) : null;
-          const l2e = l.l2End ? new Date(l.l2End) : null;
-          if (l2s && !l.actStart && today > l2s) delayedStarts++;
-          if (l2e && !l.actEnd && today > l2e) delayedFinishes++;
-        });
-        return { delayedStarts, delayedFinishes };
+      const handleEmailTeam = () => {
+        const emailList = currentMeta.distributionList || "";
+        const subject = encodeURIComponent(`Minutes of Meeting: Nabinagar STPP WRM - Week #${weekNo}`);
+        const body = encodeURIComponent(`Dear Team,\n\nPlease find the summary for the Weekly Review Meeting (WRM) - Week #${weekNo}.\n\nSITE STATISTICS:\n- Deployed Manpower: ${currentMeta.manpower}\n- Trained Personnel: ${currentMeta.trained}\n\nEXECUTION HIGHLIGHTS:\n- Civil Targets Hit: ${getHitCount(civilWk)} / ${civilWk.length}\n- Pending Drawings: ${pendingDwgs}\n- Open Bottlenecks: ${openActs}\n- Open HSE & QA Issues: ${openHse + openQal}\n\nPlease find the detailed MoM and database backup attached.\n\nRegards,\nWRM Administrator`);
+        window.location.href = `mailto:${emailList}?subject=${subject}&body=${body}`;
       };
-      const l2Metrics = calculateL2Delays();
 
       return (
         <div className="flex h-screen w-screen bg-slate-50 overflow-hidden font-sans text-sm">
           
+          <datalist id="standard-tasks">
+            {STANDARD_CIVIL_TASKS.map(t => <option key={t} value={t} />)}
+          </datalist>
+
           <aside className="w-64 bg-ntpc-navy text-white flex flex-col h-screen shadow-2xl flex-shrink-0 z-50 no-print">
             <div className="p-4 flex items-center gap-3 border-b border-white/10">
               <div className="w-10 h-10 bg-ntpc-orange text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-md border border-white/20">N</div>
               <div><h1 className="text-sm font-black uppercase tracking-wider leading-none">Nabinagar STPP</h1><p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-1">Stage-II Portal</p></div>
             </div>
 
-            <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto custom-scroll">
-              {[ { id: "DASHBOARD", icon: "📊", label: "Executive Summary" }, { id: "TEAM ROSTER", icon: "👥", label: "Master Team List" }, { id: "L2 SCHEDULE", icon: "📅", label: "L2 Master Fronts" }, { id: "EXECUTION", icon: "🏗️", label: "Discipline Execution" }, { id: "DRAWINGS", icon: "📐", label: "Engineering & DCI" }, { id: "HSE & QA", icon: "🛡️", label: "HSE & Quality NCR" }, { id: "ACTIONS", icon: "⚡", label: "Bottlenecks Tracker" } ].map(m => (
-                <button key={m.id} onClick={() => setTab(m.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${tab === m.id ? "bg-ntpc-orange text-white shadow-md" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+            <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto custom-scroll">
+              {[ { id: "DASHBOARD", icon: "📊", label: "Executive Summary" }, { id: "TEAM ROSTER", icon: "👥", label: "Master Team List" }, { id: "L2 SCHEDULE", icon: "📅", label: "L2 Master Fronts" }, { id: "PROGRESS", icon: "📈", label: "Master BOQ Progress" }, { id: "EXECUTION", icon: "🏗️", label: "Discipline Execution" }, { id: "DRAWINGS", icon: "📐", label: "Engineering & DCI" }, { id: "HSE & QA", icon: "🛡️", label: "HSE & Quality NCR" }, { id: "ACTIONS", icon: "⚡", label: "Bottlenecks Tracker" } ].map(m => (
+                <button key={m.id} onClick={() => setTab(m.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${tab === m.id ? "bg-ntpc-orange text-white shadow-md" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
                   <span className="text-lg">{m.icon}</span>{m.label}
                 </button>
               ))}
@@ -326,6 +418,7 @@
 
               <div className="flex items-center gap-3">
                 <button onClick={exportToExcel} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-emerald-100 transition flex items-center gap-2">📥 Export Excel</button>
+                <button onClick={handleEmailTeam} className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-amber-100 transition flex items-center gap-2">✉️ Email Team</button>
                 <button onClick={() => setShowPrintModal(true)} className="bg-ntpc-blue hover:bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-extrabold uppercase shadow">🖨️ Print MoM</button>
               </div>
             </header>
@@ -336,13 +429,14 @@
                 <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-rose-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-fade-in">
                   <span className="font-bold text-sm">{selectedIds.length} Rows Selected</span>
                   <button onClick={() => {
-                    const col = tab === "L2 SCHEDULE" ? "l2Schedule" : tab === "TEAM ROSTER" ? "teamMaster" : tab === "DRAWINGS" ? "drawings" : tab === "ACTIONS" ? "actions" : tab === "HSE & QA" ? "safetyLogs" : activeDiscipline==="Civil" ? "civilExecution" : activeDiscipline==="Mechanical" ? "mechExecution" : "elecExecution";
+                    const col = tab === "L2 SCHEDULE" ? "l2Schedule" : tab === "TEAM ROSTER" ? "teamMaster" : tab === "PROGRESS" ? "masterBOQ" : tab === "DRAWINGS" ? "drawings" : tab === "ACTIONS" ? "actions" : tab === "HSE & QA" ? "safetyLogs" : activeDiscipline==="Civil" ? "civilExecution" : activeDiscipline==="Mechanical" ? "mechExecution" : "elecExecution";
                     deleteSelected(col);
                   }} className="bg-white text-rose-600 px-4 py-1.5 rounded-full text-xs font-black uppercase hover:bg-rose-50">Delete Selected</button>
                   <button onClick={() => setSelectedIds([])} className="text-rose-200 hover:text-white font-bold text-xs">Cancel</button>
                 </div>
               )}
 
+              {/* TAB: TEAM ROSTER */}
               {tab === "TEAM ROSTER" && (
                 <div className="space-y-6 fade-in pb-12">
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -370,16 +464,22 @@
                       </tbody>
                     </table>
                   </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">MoM Email Distribution List</h3>
+                    <p className="text-[11px] text-slate-500 font-bold mb-3">These emails will automatically be filled when clicking "Email Team". Separate with commas.</p>
+                    <textarea rows="2" value={currentMeta.distributionList} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, distributionList: e.target.value}}}))} placeholder="e.g. hop@ntpc.co.in, pm@tpl.com" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg font-mono text-xs font-bold outline-none focus:border-ntpc-blue"></textarea>
+                  </div>
                 </div>
               )}
 
+              {/* TAB: DASHBOARD */}
               {tab === "DASHBOARD" && (
                 <div className="space-y-6 fade-in pb-8">
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-4">Meeting Participants & Site Strength</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
                       
-                      {/* NTPC MULTI SELECT */}
                       <div>
                         <span className="text-xs font-black uppercase text-blue-600 block mb-3 border-b pb-2">NTPC Leadership Team</span>
                         <select onChange={e => toggleAttendee('NTPC', e.target.value)} value="" className="w-full bg-slate-50 border p-2 rounded-lg text-xs font-bold outline-none cursor-pointer mb-3">
@@ -389,14 +489,12 @@
                         <div className="flex flex-wrap gap-2">
                           {(currentMeta.ntpcAttendees||[]).map(a => (
                             <span key={a.id} className="bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm">
-                              {a.name} ({a.desig})
-                              <button onClick={()=>toggleAttendee('NTPC', a.id)} className="text-blue-400 hover:text-blue-600">✕</button>
+                              {a.name} ({a.desig}) <button onClick={()=>toggleAttendee('NTPC', a.id)} className="text-blue-400 hover:text-blue-600">✕</button>
                             </span>
                           ))}
                         </div>
                       </div>
 
-                      {/* TPL MULTI SELECT */}
                       <div>
                         <span className="text-xs font-black uppercase text-orange-600 block mb-3 border-b pb-2">M/s TPL Leadership Team</span>
                         <select onChange={e => toggleAttendee('TPL', e.target.value)} value="" className="w-full bg-slate-50 border p-2 rounded-lg text-xs font-bold outline-none cursor-pointer mb-3">
@@ -406,8 +504,7 @@
                         <div className="flex flex-wrap gap-2">
                           {(currentMeta.tplAttendees||[]).map(a => (
                             <span key={a.id} className="bg-orange-50 text-orange-800 border border-orange-200 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm">
-                              {a.name} ({a.desig})
-                              <button onClick={()=>toggleAttendee('TPL', a.id)} className="text-orange-400 hover:text-orange-600">✕</button>
+                              {a.name} ({a.desig}) <button onClick={()=>toggleAttendee('TPL', a.id)} className="text-orange-400 hover:text-orange-600">✕</button>
                             </span>
                           ))}
                         </div>
@@ -419,32 +516,75 @@
                       <div><label className="text-xs font-bold uppercase text-slate-400 block mb-1">Total Persons Trained</label><input type="number" value={currentMeta.trained} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, trained: parseInt(e.target.value)||0}}}))} className="font-black text-2xl text-emerald-600 bg-slate-50 border border-slate-300 rounded-lg p-2 w-32 outline-none text-center" /></div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-blue-600 uppercase tracking-wider">Civil Targets Met</div><div className="text-2xl font-black text-slate-800">{civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-blue-600 h-full transition-all" style={{width: `${civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(civilWk)} out of {civilWk.length} hit</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-amber-500 uppercase tracking-wider">Mech Targets Met</div><div className="text-2xl font-black text-slate-800">{mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-amber-500 h-full transition-all" style={{width: `${mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(mechWk)} out of {mechWk.length} hit</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-emerald-500 uppercase tracking-wider">Elec Targets Met</div><div className="text-2xl font-black text-slate-800">{elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full transition-all" style={{width: `${elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(elecWk)} out of {elecWk.length} hit</div>
-                    </div>
-                  </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Starts</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.delayedStarts}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Finishes</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.delayedFinishes}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Starts</span><div className="text-3xl font-black text-rose-600 mt-1">{db.l2Schedule.filter(l => getL2DelayStatus(l).isStartOverdue).length}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Finishes</span><div className="text-3xl font-black text-rose-600 mt-1">{db.l2Schedule.filter(l => getL2DelayStatus(l).isFinishOverdue).length}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Drawings</span><div className="text-3xl font-black text-amber-500 mt-1">{pendingDwgs}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Bottlenecks</span><div className="text-3xl font-black text-rose-600 mt-1">{openActs}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Safety/QA</span><div className="text-3xl font-black text-ntpc-orange mt-1">{openHse + openQal}</div></div>
                   </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Contract L2 Schedule Variance Diagnostics</h3>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated baseline cross-checking against Indian Standard Time (IST)</p>
+                    <DelayTracker title="Civil Works" tasks={civilWk} discipline="Civil" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Mechanical Works" tasks={mechWk} discipline="Mechanical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Electrical Works" tasks={elecWk} discipline="Electrical" l2Schedule={db.l2Schedule} />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: PROGRESS BOQ */}
+              {tab === "PROGRESS" && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden fade-in">
+                  <div className="p-4 bg-slate-50 border-b flex flex-wrap justify-between items-center gap-4">
+                    <div className="flex gap-2 bg-slate-200 p-1.5 rounded-lg">
+                      {["Civil", "Mechanical", "Electrical"].map(d => (
+                        <button key={d} onClick={() => setActiveDiscipline(d)} className={`px-4 py-2 rounded text-xs font-black uppercase transition-all ${activeDiscipline === d ? "bg-ntpc-blue text-white shadow-md" : "text-slate-600 hover:bg-slate-300"}`}>{d} BOQ</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setPasteType("BOQ"); setShowPasteModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase shadow">📋 Paste from Excel</button>
+                      <button onClick={() => handleAddRow("BOQ")} className="bg-ntpc-orange text-white px-4 py-2 rounded-lg text-xs font-black uppercase shadow">+ Add BOQ Item</button>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 bg-blue-50/50 border-b border-blue-100 flex items-center justify-between">
+                    <p className="text-xs text-blue-800 font-bold px-2">Total Cumulative = (Historical Base Actuals) + (Sum of Weekly App Actuals)</p>
+                  </div>
+
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(computedBOQ.filter(x=>x.discipline===activeDiscipline).map(x=>x.id))} checked={selectedIds.length===computedBOQ.filter(x=>x.discipline===activeDiscipline).length && computedBOQ.filter(x=>x.discipline===activeDiscipline).length>0}/></th><th className="p-3 w-[15%] border-r border-slate-700">L2 Reference</th><th className="p-3 w-[18%]">Standard Task Name</th><th className="p-3 w-[5%] text-center border-r border-slate-700">UoM</th><th className="p-3 w-[8%] text-center bg-slate-800 text-blue-300">Total Scope</th><th className="p-3 w-[8%] text-center bg-slate-800 text-amber-300 border-r border-slate-700">Base Actuals</th><th className="p-3 w-[8%] text-center text-slate-300">App Actuals</th><th className="p-3 w-[9%] text-center text-emerald-400">Total Cum.</th><th className="p-3 w-[8%] text-center text-rose-300 border-r border-slate-700">Balance</th><th className="p-3 w-[15%]">% Progress</th><th className="p-3 w-8"></th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {computedBOQ.filter(b => b.discipline === activeDiscipline).map((b) => (
+                        <tr key={b.id} className={`hover:bg-slate-50 ${selectedIds.includes(b.id)?'bg-rose-50':''}`}>
+                          <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(b.id)} onChange={() => toggleSelect(b.id)} className="w-4 h-4 cursor-pointer"/></td>
+                          <td className="p-2 border-r"><select value={b.l2Ref} onChange={e => handleTaskChange(b.id, "l2Ref", e.target.value, "masterBOQ")} className="w-full bg-slate-100 rounded p-2 font-bold text-xs text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{db.l2Schedule.filter(l => l.discipline === activeDiscipline).map(l => <option key={l.id} value={l.desc}>{l.desc}</option>)}</select></td>
+                          <td className="p-2"><input type="text" list="standard-tasks" value={b.taskName} onChange={e => handleTaskChange(b.id, "taskName", e.target.value, "masterBOQ")} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none focus:border-ntpc-orange" /></td>
+                          <td className="p-2 text-center border-r"><input type="text" value={b.uom} onChange={e => handleTaskChange(b.id, "uom", e.target.value, "masterBOQ")} className="w-full bg-slate-100 text-center rounded p-2 text-xs font-bold outline-none" /></td>
+                          
+                          {/* Inputs */}
+                          <td className="p-2"><input type="number" value={b.totalScope} onChange={e => handleTaskChange(b.id, "totalScope", e.target.value, "masterBOQ")} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-blue-900 rounded p-2 text-sm outline-none" /></td>
+                          <td className="p-2 border-r"><input type="number" value={b.historicalActual} onChange={e => handleTaskChange(b.id, "historicalActual", e.target.value, "masterBOQ")} className="w-full bg-amber-50 border border-amber-200 text-center font-bold text-amber-800 rounded p-2 text-sm outline-none" title="Progress achieved before using this app" /></td>
+                          
+                          {/* Computed Read-Only Fields */}
+                          <td className="p-2 text-center font-bold text-slate-500 bg-slate-50/50">{b.appActuals}</td>
+                          <td className="p-2 text-center font-black text-emerald-700 bg-emerald-50/30">{b.totalCum}</td>
+                          <td className="p-2 text-center font-bold text-rose-700 bg-rose-50/30 border-r">{b.balance}</td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden shadow-inner"><div className={`h-full transition-all ${b.pct === 100 ? 'bg-emerald-500' : 'bg-ntpc-blue'}`} style={{width: `${b.pct}%`}}></div></div>
+                              <span className={`text-[10px] font-black w-8 text-right ${b.pct === 100 ? 'text-emerald-600' : 'text-slate-700'}`}>{b.pct}%</span>
+                            </div>
+                          </td>
+                          <td className="p-2 text-center"><button onClick={()=>deleteIndividual("masterBOQ", b.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
@@ -461,18 +601,26 @@
                   <table className="w-full text-left text-sm">
                     <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.l2Schedule.map(x=>x.id))} checked={selectedIds.length===db.l2Schedule.length && db.l2Schedule.length>0}/></th><th className="p-3 w-[15%]">Discipline</th><th className="p-3 w-[35%]">L2 Front Description</th><th className="p-3 text-center">Baseline Start</th><th className="p-3 text-center">Actual Start</th><th className="p-3 text-center">Baseline Finish</th><th className="p-3 text-center">Actual Finish</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {db.l2Schedule.map((l, i) => (
-                        <tr key={l.id} className={`hover:bg-slate-50 ${selectedIds.includes(l.id)?'bg-rose-50':''}`}>
-                          <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => toggleSelect(l.id)} className="w-4 h-4 cursor-pointer"/></td>
-                          <td className="p-2"><select value={l.discipline} onChange={e => handleTaskChange(l.id, "discipline", e.target.value, "l2Schedule")} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
-                          <td className="p-2"><input type="text" value={l.desc} onChange={e => handleTaskChange(l.id, "desc", e.target.value, "l2Schedule")} className="w-full bg-transparent border-b p-2 font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => handleTaskChange(l.id, "l2Start", e.target.value, "l2Schedule")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.actStart} onChange={e => handleTaskChange(l.id, "actStart", e.target.value, "l2Schedule")} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => handleTaskChange(l.id, "l2End", e.target.value, "l2Schedule")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => handleTaskChange(l.id, "actEnd", e.target.value, "l2Schedule")} className="bg-blue-50 text-blue-900 p-2 rounded text-xs font-bold outline-none" /></td>
-                          <td className="p-2 text-center"><button onClick={()=>deleteIndividual("l2Schedule", l.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
-                        </tr>
-                      ))}
+                      {db.l2Schedule.map((l, i) => {
+                        const status = getL2DelayStatus(l);
+                        const rowDelayed = status.isStartOverdue || status.isFinishOverdue;
+                        
+                        return (
+                          <tr key={l.id} className={`hover:bg-slate-50 ${selectedIds.includes(l.id)?'bg-rose-100' : rowDelayed ? 'bg-rose-50/80' : ''}`}>
+                            <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => toggleSelect(l.id)} className="w-4 h-4 cursor-pointer"/></td>
+                            <td className="p-2"><select value={l.discipline} onChange={e => handleTaskChange(l.id, "discipline", e.target.value, "l2Schedule")} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
+                            <td className="p-2"><input type="text" value={l.desc} onChange={e => handleTaskChange(l.id, "desc", e.target.value, "l2Schedule")} className={`w-full bg-transparent border-b p-2 font-bold outline-none ${rowDelayed ? 'text-rose-900' : ''}`} /></td>
+                            
+                            <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => handleTaskChange(l.id, "l2Start", e.target.value, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isStartOverdue ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-slate-100'}`} /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.actStart} onChange={e => handleTaskChange(l.id, "actStart", e.target.value, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isStartOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-blue-50 text-blue-900'}`} /></td>
+                            
+                            <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => handleTaskChange(l.id, "l2End", e.target.value, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isFinishOverdue ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-slate-100'}`} /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => handleTaskChange(l.id, "actEnd", e.target.value, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isFinishOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-blue-50 text-blue-900'}`} /></td>
+                            
+                            <td className="p-2 text-center"><button onClick={()=>deleteIndividual("l2Schedule", l.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -507,7 +655,7 @@
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
                             <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
                             <td className="p-2"><select value={t.l2Ref} onChange={e => handleTaskChange(t.id, "l2Ref", e.target.value, col)} className="w-full bg-slate-100 rounded p-2 font-bold text-xs text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{db.l2Schedule.filter(l => l.discipline === activeDiscipline).map(l => <option key={l.id} value={l.desc}>{l.desc}</option>)}</select></td>
-                            <td className="p-2"><input type="text" value={t.taskName} onChange={e => handleTaskChange(t.id, "taskName", e.target.value, col)} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none" /></td>
+                            <td className="p-2"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskChange(t.id, "taskName", e.target.value, col)} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none" /></td>
                             <td className="p-2 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskChange(t.id, "unit", e.target.value, col)} className="w-12 bg-slate-100 text-center rounded p-2 text-xs font-bold outline-none" /></td>
                             <td className="p-2"><input type="number" value={t.plan} onChange={e => handleTaskChange(t.id, "plan", e.target.value, col)} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-ntpc-blue rounded p-2 text-sm outline-none" /></td>
                             <td className="p-2"><input type="number" value={t.act} onChange={e => handleTaskChange(t.id, "act", e.target.value, col)} className="w-full bg-emerald-50 border border-emerald-200 text-center font-bold text-emerald-800 rounded p-2 text-sm outline-none" /></td>
@@ -566,7 +714,6 @@
               {tab === "HSE & QA" && (
                 <div className="space-y-6 fade-in">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* SAFETY */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-orange-600 uppercase tracking-wider">Safety Violations Log</h3></div>
                       <table className="w-full text-left text-sm">
@@ -587,7 +734,6 @@
                       <div className="p-3 bg-slate-50 border-t"><button onClick={() => { setLogForm({ type: "Safety", category: "Unsafe Condition", dept: "Civil", desc: "", file: null }); setShowLogModal(true); }} className="text-xs font-black text-ntpc-orange hover:underline uppercase">+ Log Safety Issue with Photo</button></div>
                     </div>
 
-                    {/* QUALITY */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-blue-600 uppercase tracking-wider">Quality (FQA) NCRs</h3></div>
                       <table className="w-full text-left text-sm">
@@ -643,7 +789,8 @@
             </main>
           </div>
 
-          {/* MODAL: EXCEL PASTE IMPORT */}
+          {/* MODALS (Paste, Photo, Print, Image Viewer) */}
+          
           {showPasteModal && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
@@ -651,6 +798,7 @@
                 <p className="text-[11px] text-slate-500 font-bold">
                   {pasteType === "Team" ? "Columns: [Emp ID | Full Name | Designation | Department | Org]"
                    : pasteType === "L2" ? "Columns: [Discipline | Description | L2 Start | Act Start | L2 End | Act End]" 
+                   : pasteType === "BOQ" ? "Columns: [Discipline | L2 Ref | Task Name | UoM | Total Scope | Historical Actual]"
                    : pasteType === "Drawings" ? "Columns: [L2 Link | Discipline | Dwg No | Desc | Priority | Target | Expected | Status | Impact | Remarks]"
                    : pasteType === "Actions" ? "Columns: [Category | Description | Resp | Target | Revised | Status | NTPC Remarks]"
                    : "Columns: [L2 Ref | Task Name | Unit | Plan | Actual | Next Plan | Cum Backlog | Hindrance | TPL Remarks | NTPC Directives]"}
@@ -664,12 +812,10 @@
             </div>
           )}
 
-          {/* MODAL: LOG PHOTO UPLOAD WITH COMPRESSION */}
           {showLogModal && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
                 <h3 className="text-sm font-black uppercase text-ntpc-blue">Log Field Observation</h3>
-                
                 <div className="grid grid-cols-2 gap-3">
                   <select value={logForm.dept} onChange={e => setLogForm({ ...logForm, dept: e.target.value })} className="border p-2 rounded text-xs font-bold outline-none">
                     <option>Civil</option><option>Mechanical</option><option>Electrical</option><option>Site Wide</option>
@@ -684,14 +830,11 @@
                     </select>
                   )}
                 </div>
-
                 <textarea rows="3" value={logForm.desc} onChange={e => setLogForm({ ...logForm, desc: e.target.value })} placeholder="Describe observation..." className="w-full border p-2 rounded text-xs font-medium outline-none"></textarea>
-                
                 <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-3 rounded-lg text-center">
-                  <span className="text-[10px] font-bold text-blue-700 block mb-1">Attach Photo (Auto-compressed to save memory)</span>
+                  <span className="text-[10px] font-bold text-blue-700 block mb-1">Attach Photo (Auto-compressed)</span>
                   <input type="file" accept="image/*" onChange={e => setLogForm({ ...logForm, file: e.target.files[0] })} className="text-xs" />
                 </div>
-
                 <div className="flex gap-2">
                   <button onClick={() => setShowLogModal(false)} className="flex-1 bg-slate-100 py-2 rounded text-xs font-black uppercase">Cancel</button>
                   <button onClick={handleSaveLog} className="flex-1 bg-ntpc-orange text-white py-2 rounded text-xs font-black uppercase shadow">Save & Upload</button>
@@ -700,7 +843,6 @@
             </div>
           )}
 
-          {/* MODAL: IMAGE PREVIEW */}
           {viewImage && (
             <div className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white p-2 rounded-xl max-w-3xl w-full relative">
@@ -710,22 +852,12 @@
             </div>
           )}
 
-          {/* MODAL: PRINT CONFIGURATION */}
           {showPrintModal && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5">
                 <h3 className="text-lg font-black uppercase text-ntpc-blue">Configure A4 Print MoM</h3>
-                
-                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  <input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />
-                  Include Dashboard Summary
-                </label>
-                
-                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  <input type="checkbox" checked={printIncludePhotos} onChange={e => setPrintIncludePhotos(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />
-                  Include Safety/QA Photos
-                </label>
-
+                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Dashboard & BOQ Summary</label>
+                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludePhotos} onChange={e => setPrintIncludePhotos(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Safety/QA Photos</label>
                 <div className="flex gap-2">
                   <button onClick={() => setShowPrintModal(false)} className="flex-1 bg-slate-100 py-2.5 rounded-lg text-xs font-black uppercase hover:bg-slate-200">Cancel</button>
                   <button onClick={() => { setShowPrintModal(false); setTimeout(() => window.print(), 300); }} className="flex-1 bg-ntpc-blue text-white py-2.5 rounded-lg text-xs font-black uppercase shadow hover:bg-blue-800">Confirm & Print</button>
@@ -742,7 +874,6 @@
             <div className="print-header-box">
               <h1 className="print-title">Nabinagar Super Thermal Power Project</h1>
               <div className="header-gradient-line"></div>
-              <div className="print-subtitle">1980 MW (Stage-I: 3X660) & 2400 MW (Stage-II: 3X800) under construction</div>
             </div>
 
             <div className="flex justify-between items-end mb-4 border-b border-black pb-2">
@@ -778,10 +909,37 @@
                     </tr>
                   </tbody>
                 </table>
+                
+                {computedBOQ.length > 0 && (
+                  <React.Fragment>
+                    <h3 className="section-title">3. Master BOQ Progress Tracking (Cumulative)</h3>
+                    <table>
+                      <thead><tr><th>Discipline</th><th>L2 Reference & Task Name</th><th className="text-center">UoM</th><th className="text-center">Total Scope</th><th className="text-center">Cum. Actual</th><th className="text-center">Balance</th><th>% Complete</th></tr></thead>
+                      <tbody>
+                        {computedBOQ.map((b, i) => (
+                          <tr key={i}>
+                            <td>{b.discipline}</td>
+                            <td><strong>{b.l2Ref}</strong><br/>{b.taskName}</td>
+                            <td className="text-center">{b.uom}</td>
+                            <td className="text-center">{b.totalScope}</td>
+                            <td className="text-center font-bold text-emerald-800">{b.totalCum}</td>
+                            <td className="text-center text-rose-800">{b.balance}</td>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <span className="w-8 font-bold text-[10px]">{b.pct}%</span>
+                                <div className="print-progress-bar w-full"><div className="print-progress-fill" style={{width: `${b.pct}%`}}></div></div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </React.Fragment>
+                )}
               </React.Fragment>
             )}
 
-            <h3 className="section-title">{printIncludeDashboard ? "3" : "2"}. Discipline Execution Performance</h3>
+            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "4" : printIncludeDashboard ? "3" : "2"}. Discipline Execution Performance</h3>
             <table>
               <thead><tr><th className="w-[22%]">Work Front & Task</th><th className="text-center w-10">Plan</th><th className="text-center w-10">Act</th><th className="text-center w-10">Var</th><th className="text-center w-10">Backlog</th><th className="w-[18%]">Hindrance</th><th className="w-[18%]">TPL Remarks</th><th className="w-[18%]">NTPC Directives</th></tr></thead>
               <tbody>
@@ -799,13 +957,9 @@
             </table>
 
             <div className="page-break"></div>
-            
-            <div className="print-header-box">
-              <h1 className="print-title">Nabinagar Super Thermal Power Project</h1>
-              <div className="header-gradient-line"></div>
-            </div>
+            <div className="print-header-box"><h1 className="print-title">Nabinagar Super Thermal Power Project</h1><div className="header-gradient-line"></div></div>
 
-            <h3 className="section-title">{printIncludeDashboard ? "4" : "3"}. Priority Actions & Bottlenecks</h3>
+            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "5" : printIncludeDashboard ? "4" : "3"}. Priority Actions & Bottlenecks</h3>
             <table>
               <thead><tr><th className="w-[30%]">Action Description</th><th className="w-[15%]">Resp</th><th className="text-center w-[15%]">Target</th><th className="text-center w-[10%]">Status</th><th className="w-[30%]">NTPC Review Directives</th></tr></thead>
               <tbody>
@@ -819,7 +973,7 @@
               </tbody>
             </table>
 
-            <h3 className="section-title">{printIncludeDashboard ? "5" : "4"}. HSE & Quality Assurance Logs</h3>
+            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "6" : printIncludeDashboard ? "5" : "4"}. HSE & Quality Assurance Logs</h3>
             <table>
               <thead><tr><th className="w-[20%]">Dept & Category</th><th className="w-[50%]">Observation Detail</th><th className="text-center w-[15%]">Status</th>{printIncludePhotos && <th className="text-center w-[15%]">Evidence</th>}</tr></thead>
               <tbody>
