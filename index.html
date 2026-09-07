@@ -36,15 +36,15 @@
       table { border-collapse: collapse; width: 100%; page-break-inside: auto; margin-bottom: 16px; page-break-after: auto; }
       thead { display: table-header-group; }
       tr { page-break-inside: avoid; page-break-after: auto; }
-      th { background-color: #f1f5f9 !important; color: #0f172a !important; font-weight: bold; border: 1px solid #94a3b8; padding: 8px; font-size: 11px; text-transform: uppercase;}
-      td { border: 1px solid #94a3b8; padding: 8px; font-size: 11px; vertical-align: top;}
+      th { background-color: #f1f5f9 !important; color: #0f172a !important; font-weight: bold; border: 1px solid #94a3b8; padding: 6px; font-size: 10px; text-transform: uppercase;}
+      td { border: 1px solid #94a3b8; padding: 6px; font-size: 10px; vertical-align: top;}
       .print-header-box { text-align: center; border-bottom: 3px solid #0066b3; padding-bottom: 10px; margin-bottom: 15px; }
       .print-title { color: #0066b3; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; margin: 0; text-transform: uppercase;}
       .print-subtitle { font-size: 12px; font-style: italic; font-weight: bold; margin-top: 4px; color: #334155; }
       .header-gradient-line { height: 3px; background: linear-gradient(to right, #0066b3 0%, #85b86b 50%, #ea580c 100%); margin: 6px auto; width: 80%; }
       h3.section-title { font-size: 14px; font-weight: 800; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; margin-bottom: 10px; text-transform: uppercase;}
       .photo-box { width: 180px; height: auto; border: 1px solid #cbd5e1; border-radius: 4px; margin-top: 4px; }
-      .print-progress-bar { height: 8px; background: #cbd5e1; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+      .print-progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
       .print-progress-fill { height: 100%; background: #0066b3; }
     }
   </style>
@@ -56,9 +56,9 @@
     const { useState, useEffect, useMemo, useRef, Component } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-    const STORAGE_KEY = "ntpc_wrm_projector_v12";
+    const STORAGE_KEY = "ntpc_wrm_projector_v14";
 
-    // GLOBAL ERROR BOUNDARY (Prevents the White Screen of Death)
+    // GLOBAL ERROR BOUNDARY
     class ErrorBoundary extends Component {
       constructor(props) { super(props); this.state = { hasError: false, error: null }; }
       static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -68,17 +68,15 @@
             <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white p-8">
               <div className="w-16 h-16 bg-rose-600 rounded-xl flex items-center justify-center text-3xl mb-4">⚠️</div>
               <h1 className="text-2xl font-black uppercase mb-2">Safe Recovery Mode</h1>
-              <p className="text-slate-400 mb-6 text-center max-w-lg">A data contradiction caused a render pause. Your database is safe. You can securely export your latest JSON backup below, or force a page reload to try again.</p>
+              <p className="text-slate-400 mb-6 text-center max-w-lg">A data conflict occurred. Your database is safe. Export your backup below or reload.</p>
               <div className="flex gap-4">
                 <button onClick={() => window.location.reload()} className="bg-ntpc-blue px-6 py-3 rounded-lg font-bold">↻ Reload Portal</button>
                 <button onClick={() => {
                   const local = localStorage.getItem(STORAGE_KEY);
                   if(!local) return alert("No local backup found.");
-                  const a = document.createElement('a');
-                  a.href = "data:text/json;charset=utf-8," + encodeURIComponent(local);
-                  a.download = "NTPC_Emergency_Backup.json";
+                  const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(local); a.download = "NTPC_Emergency_Backup.json";
                   document.body.appendChild(a); a.click(); a.remove();
-                }} className="bg-slate-700 px-6 py-3 rounded-lg font-bold">📥 Export Local Backup</button>
+                }} className="bg-slate-700 px-6 py-3 rounded-lg font-bold">📥 Export Backup</button>
               </div>
             </div>
           );
@@ -98,24 +96,17 @@
       return val;
     };
 
-    // BULLETPROOF AUTO-COMPRESSOR (Prevents Photo Freezes)
     const compressImage = (file) => {
       return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onerror = () => resolve(""); // Failsafe
+        const reader = new FileReader(); reader.onerror = () => resolve("");
         reader.onload = (event) => {
-          const img = new Image();
-          img.onerror = () => resolve(""); // Failsafe
+          const img = new Image(); img.onerror = () => resolve("");
           img.onload = () => {
             try {
-              const canvas = document.createElement('canvas');
-              const MAX_WIDTH = 800;
-              const scaleSize = MAX_WIDTH / img.width;
-              canvas.width = MAX_WIDTH;
-              canvas.height = img.height * scaleSize;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL('image/jpeg', 0.6)); // Aggressive 60% compression for safety
+              const canvas = document.createElement('canvas'); const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
+              canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/jpeg', 0.6)); 
             } catch(e) { resolve(""); }
           };
           img.src = event.target.result;
@@ -124,21 +115,32 @@
       });
     };
 
+    // INTELLIGENT REVISED DATE LOGIC
     const getL2DelayStatus = (l) => {
       const today = new Date(); today.setHours(0,0,0,0);
-      const l2s = l.l2Start ? new Date(l.l2Start) : null; if (l2s) l2s.setHours(0,0,0,0);
-      const actS = l.actStart ? new Date(l.actStart) : null; if (actS) actS.setHours(0,0,0,0);
-      const l2e = l.l2End ? new Date(l.l2End) : null; if (l2e) l2e.setHours(0,0,0,0);
-      const actE = l.actEnd ? new Date(l.actEnd) : null; if (actE) actE.setHours(0,0,0,0);
+      
+      const effStartStr = l.revStart || l.l2Start;
+      const effEndStr = l.revEnd || l.l2End;
+
+      const effS = effStartStr ? new Date(effStartStr) : null; if(effS) effS.setHours(0,0,0,0);
+      const actS = l.actStart ? new Date(l.actStart) : null; if(actS) actS.setHours(0,0,0,0);
+      const effE = effEndStr ? new Date(effEndStr) : null; if(effE) effE.setHours(0,0,0,0);
+      const actE = l.actEnd ? new Date(l.actEnd) : null; if(actE) actE.setHours(0,0,0,0);
 
       let delayType = null, targetDisplay = "", actualDisplay = "Missing Actuals";
 
-      if (l2e && !actE && today > l2e) { delayType = "Finish Overdue"; targetDisplay = l.l2End; } 
-      else if (l2e && actE && actE > l2e) { delayType = "Finish Delayed"; targetDisplay = l.l2End; actualDisplay = l.actEnd; } 
-      else if (l2s && !actS && today > l2s) { delayType = "Start Overdue"; targetDisplay = l.l2Start; } 
-      else if (l2s && actS && actS > l2s) { delayType = "Start Delayed"; targetDisplay = l.l2Start; actualDisplay = l.actStart; }
+      if (effE && !actE && today > effE) { delayType = "Finish Overdue"; targetDisplay = effEndStr; } 
+      else if (effE && actE && actE > effE) { delayType = "Finish Delayed"; targetDisplay = effEndStr; actualDisplay = l.actEnd; } 
+      else if (effS && !actS && today > effS) { delayType = "Start Overdue"; targetDisplay = effStartStr; } 
+      else if (effS && actS && actS > effS) { delayType = "Start Delayed"; targetDisplay = effStartStr; actualDisplay = l.actStart; }
 
-      return { isStartOverdue: (l2s && !actS && today > l2s), isFinishOverdue: (l2e && !actE && today > l2e), delayType, targetDisplay, actualDisplay };
+      return { 
+        isNotStarted: !actS, 
+        isStartedLate: (effS && actS && actS > effS), 
+        isStartOverdue: (effS && !actS && today > effS), 
+        isFinishOverdue: (effE && !actE && today > effE), 
+        delayType, targetDisplay, actualDisplay 
+      };
     };
 
     const DelayTracker = ({ title, tasks, discipline, l2Schedule }) => {
@@ -157,7 +159,7 @@
         <div className="mt-4 border border-rose-200 bg-white rounded-xl overflow-hidden shadow-sm">
           <div className="bg-rose-50 px-4 py-2 border-b border-rose-200 flex justify-between items-center"><h4 className="text-[12px] font-black uppercase tracking-wider text-rose-800">{title} Schedule Slips</h4><span className="text-[10px] font-bold text-rose-600 bg-rose-200 px-2 py-0.5 rounded-full">{delayedTasks.length} Fronts Impacted</span></div>
           <table className="w-full text-left text-[11px]">
-            <thead className="bg-rose-50/50"><tr className="text-rose-900/70 uppercase"><th className="py-2 px-4 w-[15%]">Slip Nature</th><th className="py-2 px-4 w-[25%]">Work Front & Task</th><th className="py-2 px-4 w-[12%]">Target Date</th><th className="py-2 px-4 w-[13%] text-rose-600">Actual/Status</th><th className="py-2 px-4 w-[35%]">Primary Hindrance Cause</th></tr></thead>
+            <thead className="bg-rose-50/50"><tr className="text-rose-900/70 uppercase"><th className="py-2 px-4 w-[15%]">Slip Nature</th><th className="py-2 px-4 w-[25%]">Work Front & Task</th><th className="py-2 px-4 w-[12%]">Effective Target</th><th className="py-2 px-4 w-[13%] text-rose-600">Actual/Status</th><th className="py-2 px-4 w-[35%]">Primary Hindrance Cause</th></tr></thead>
             <tbody className="divide-y divide-rose-100">
               {delayedTasks.map((d, i) => (
                 <tr key={i} className="text-rose-950 font-bold hover:bg-rose-50/30">
@@ -184,20 +186,19 @@
     const sanitizeDB = (data) => {
       if (!data || typeof data !== 'object') return DEFAULT_DB;
       const fixTask = t => ({...t, subFront: t.subFront || ""});
+      const fixL2 = l => ({...l, subFront: l.subFront || "", revStart: l.revStart || "", revEnd: l.revEnd || ""});
       return {
         currentWeek: data.currentWeek || 35, weeks: Array.isArray(data.weeks) ? data.weeks : [35], 
         standardTasks: Array.isArray(data.standardTasks) ? data.standardTasks : DEFAULT_DB.standardTasks,
         weekMeta: data.weekMeta || DEFAULT_DB.weekMeta,
         teamMaster: Array.isArray(data.teamMaster) ? data.teamMaster : [], 
-        l2Schedule: (Array.isArray(data.l2Schedule) ? data.l2Schedule : []).map(fixTask),
+        l2Schedule: (Array.isArray(data.l2Schedule) ? data.l2Schedule : []).map(fixL2),
         masterBOQ: (Array.isArray(data.masterBOQ) ? data.masterBOQ : []).map(fixTask),
         civilExecution: (Array.isArray(data.civilExecution) ? data.civilExecution : []).map(fixTask), 
         mechExecution: (Array.isArray(data.mechExecution) ? data.mechExecution : []).map(fixTask), 
         elecExecution: (Array.isArray(data.elecExecution) ? data.elecExecution : []).map(fixTask),
         drawings: (Array.isArray(data.drawings) ? data.drawings : []).map(fixTask), 
-        safetyLogs: Array.isArray(data.safetyLogs) ? data.safetyLogs : [], 
-        qualityLogs: Array.isArray(data.qualityLogs) ? data.qualityLogs : [], 
-        actions: Array.isArray(data.actions) ? data.actions : []
+        safetyLogs: Array.isArray(data.safetyLogs) ? data.safetyLogs : [], qualityLogs: Array.isArray(data.qualityLogs) ? data.qualityLogs : [], actions: Array.isArray(data.actions) ? data.actions : []
       };
     };
 
@@ -215,8 +216,7 @@
       }, []);
 
       const saveToCloud = (dataToSave) => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-        setCloudStatus("Saving...");
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave)); setCloudStatus("Saving...");
         fetch(FIREBASE_URL, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dataToSave) })
         .then(() => setCloudStatus("Cloud Synced (<80ms)")).catch(() => setCloudStatus("Offline (Saved Locally)"));
       };
@@ -278,11 +278,10 @@
         reader.onload = (event) => {
           try {
             const parsed = JSON.parse(event.target.result);
-            if (parsed.weekMeta) { setDb(parsed); setWeekNo(parsed.currentWeek || 35); alert("Data restored and uploaded to Cloud successfully."); } 
+            if (parsed.weekMeta) { setDb(parsed); setWeekNo(parsed.currentWeek || 35); alert("Data restored successfully."); } 
             else { alert("Invalid backup file format"); }
           } catch(err) { alert("Error parsing file: " + err.message); }
-        };
-        reader.readAsText(file);
+        }; reader.readAsText(file);
       };
 
       const exportToExcel = () => {
@@ -303,7 +302,7 @@
       const executeExcelImport = () => {
         if (!pasteText.trim()) return; const rows = pasteText.trim().split("\n").map(r => r.split("\t")); const ts = Date.now();
         if (pasteType === "Team") { setDb(prev => ({ ...prev, teamMaster: [...rows.map((r, i) => ({ id: "TM-" + ts + i, empId: (r[0] || "").trim(), name: (r[1] || "").trim(), desig: (r[2] || "").trim(), dept: (r[3] || "").trim(), org: (r[4] || "NTPC").trim(), createdAt: ts })).filter(item => item.name), ...prev.teamMaster] })); } 
-        else if (pasteType === "L2") { setDb(prev => ({ ...prev, l2Schedule: [...rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), subFront: (r[2] || "").trim(), l2Start: cleanDate(r[3]), actStart: cleanDate(r[4]), l2End: cleanDate(r[5]), actEnd: cleanDate(r[6]), createdAt: ts })).filter(item => item.desc), ...prev.l2Schedule] })); } 
+        else if (pasteType === "L2") { setDb(prev => ({ ...prev, l2Schedule: [...rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), subFront: (r[2] || "").trim(), l2Start: cleanDate(r[3]), revStart: cleanDate(r[4]), actStart: cleanDate(r[5]), l2End: cleanDate(r[6]), revEnd: cleanDate(r[7]), actEnd: cleanDate(r[8]), createdAt: ts })).filter(item => item.desc), ...prev.l2Schedule] })); } 
         else if (pasteType === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [...rows.map((r, i) => ({ id: "BOQ-" + ts + i, discipline: (r[0] || "Civil").trim(), l2Ref: (r[1] || "").trim(), subFront: (r[2] || "").trim(), taskName: (r[3] || "").trim(), uom: (r[4] || "m³").trim(), totalScope: parseFloat(r[5])||0, historicalActual: parseFloat(r[6])||0, createdAt: ts })).filter(item => item.taskName), ...prev.masterBOQ] })); }
         else if (pasteType === "Drawings") { setDb(prev => ({ ...prev, drawings: [...rows.map((r, i) => ({ id: "DW-" + ts + i, weekNo, l2Ref: (r[0] || "").trim(), subFront: (r[1] || "").trim(), discipline: (r[2] || "Civil").trim(), drawingNo: (r[3] || "").trim(), desc: (r[4] || "").trim(), priority: (r[5] || "Moderate").trim(), targetDate: cleanDate(r[6]), expectedDate: cleanDate(r[7]), status: (r[8] || "Pending").trim(), frontImpact: (r[9] || "").trim(), remarks: (r[10] || "").trim(), createdAt: ts })).filter(item => item.drawingNo), ...prev.drawings] })); } 
         else if (pasteType === "Actions") { setDb(prev => ({ ...prev, actions: [...rows.map((r, i) => ({ id: "ACT-" + ts + i, weekNo, category: (r[0] || "Execution").trim(), desc: (r[1] || "").trim(), responsibility: (r[2] || "TPL").trim(), targetDate: cleanDate(r[3]), revisedDate: cleanDate(r[4]), status: (r[5] || "Pending").trim(), ntpcRemarks: (r[6] || "").trim(), createdAt: ts })).filter(item => item.desc), ...prev.actions] })); } 
@@ -315,15 +314,13 @@
         setPasteText(""); setShowPasteModal(false);
       };
 
-      // SAFE BULK STATE UPDATER
       const handleTaskUpdates = (taskId, updates, collection) => {
         setDb(prev => ({
           ...prev, [collection]: prev[collection].map(item => {
             if (item.id !== taskId) return item;
             const nextItem = { ...item, ...updates };
             if ('plan' in updates || 'act' in updates) {
-              const p = parseFloat(nextItem.plan) || 0;
-              const a = parseFloat(nextItem.act) || 0;
+              const p = parseFloat(nextItem.plan) || 0; const a = parseFloat(nextItem.act) || 0;
               nextItem.cumBacklog = Math.max(0, (parseFloat(item.prevBacklog||0)) + (p - a));
             }
             return nextItem;
@@ -333,7 +330,7 @@
 
       const handleAddRow = (type) => {
         const ts = Date.now();
-        if (type === "L2") { setDb(prev => ({ ...prev, l2Schedule: [{ id: "L2-"+ts, discipline: "Civil", desc: "", subFront: "", l2Start: "", actStart: "", l2End: "", actEnd: "", createdAt: ts }, ...prev.l2Schedule] })); } 
+        if (type === "L2") { setDb(prev => ({ ...prev, l2Schedule: [{ id: "L2-"+ts, discipline: "Civil", desc: "", subFront: "", l2Start: "", revStart: "", actStart: "", l2End: "", revEnd: "", actEnd: "", createdAt: ts }, ...prev.l2Schedule] })); } 
         else if (type === "Team") { setDb(prev => ({ ...prev, teamMaster: [{ id: "TM-"+ts, empId: "", name: "", desig: "", dept: "", org: "NTPC", createdAt: ts }, ...prev.teamMaster] })); } 
         else if (type === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [{ id: "BOQ-"+ts, discipline: activeDiscipline, l2Ref: "", subFront: "", taskName: "", uom: activeDiscipline==="Civil"?"m³":"MT", totalScope: 0, historicalActual: 0, createdAt: ts }, ...prev.masterBOQ] })); }
         else if (type === "Drawings") { setDb(prev => ({ ...prev, drawings: [{ id: "DW-"+ts, weekNo, l2Ref: "", subFront: "", discipline: "Civil", drawingNo: "", desc: "", priority: "Moderate", targetDate: "", expectedDate: "", status: "Pending", frontImpact: "", remarks: "", createdAt: ts }, ...prev.drawings] })); } 
@@ -347,9 +344,7 @@
 
       const handleSaveLog = async () => {
         if (!logForm.desc) return alert("Please enter an observation description.");
-        setCloudStatus("Compressing Photo...");
-        const ts = Date.now();
-        let compressedBase64 = "";
+        setCloudStatus("Compressing Photo..."); const ts = Date.now(); let compressedBase64 = "";
         if (logForm.file) { compressedBase64 = await compressImage(logForm.file); }
         
         const collection = logForm.type === "Safety" ? "safetyLogs" : "qualityLogs";
@@ -372,6 +367,7 @@
         });
       };
 
+      // COMPUTED BOQ & SITE-WIDE COMMODITY CHARTS
       const computedBOQ = useMemo(() => {
         return db.masterBOQ.map(boq => {
           const relevantExecs = boq.discipline === "Civil" ? db.civilExecution : boq.discipline === "Mechanical" ? db.mechExecution : db.elecExecution;
@@ -384,35 +380,43 @@
         });
       }, [db.masterBOQ, db.civilExecution, db.mechExecution, db.elecExecution]);
 
-      const civilWk = db.civilExecution.filter(t => t.weekNo === weekNo);
-      const mechWk = db.mechExecution.filter(t => t.weekNo === weekNo);
-      const elecWk = db.elecExecution.filter(t => t.weekNo === weekNo);
+      const commoditySummary = useMemo(() => {
+        const grouped = {};
+        computedBOQ.forEach(b => {
+          if (!grouped[b.taskName]) grouped[b.taskName] = { scope: 0, actual: 0, uom: b.uom };
+          grouped[b.taskName].scope += (parseFloat(b.totalScope) || 0);
+          grouped[b.taskName].actual += (parseFloat(b.totalCum) || 0);
+        });
+        return Object.entries(grouped).map(([task, data]) => {
+          const pct = data.scope > 0 ? Math.min(100, Math.round((data.actual / data.scope) * 100)) : 0;
+          return { task, ...data, pct };
+        }).sort((a,b) => b.scope - a.scope);
+      }, [computedBOQ]);
+
+      // KPI & DELAY LOGIC
       const getHitCount = (arr) => arr.filter(t => parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
-      
       const pendingDwgs = db.drawings.filter(d => d.weekNo === weekNo && !d.status.includes("Approved")).length;
       const openActs = db.actions.filter(a => a.weekNo === weekNo && a.status !== "Completed").length;
-      const openHse = db.safetyLogs.filter(s => s.weekNo === weekNo && s.status === "Open").length;
-      const openQal = db.qualityLogs.filter(q => q.weekNo === weekNo && q.status === "Open").length;
-
-      const calculateL2Delays = () => {
-        let delayedStarts = 0; let delayedFinishes = 0;
+      
+      const l2Metrics = useMemo(() => {
+        let notStarted = 0, startedLate = 0, startOverdue = 0, finishOverdue = 0;
         db.l2Schedule.forEach(l => {
           const s = getL2DelayStatus(l);
-          if (s.isStartOverdue) delayedStarts++;
-          if (s.isFinishOverdue) delayedFinishes++;
+          if (s.isNotStarted) notStarted++;
+          if (s.isStartedLate) startedLate++;
+          if (s.isStartOverdue) startOverdue++;
+          if (s.isFinishOverdue) finishOverdue++;
         });
-        return { delayedStarts, delayedFinishes };
-      };
-      const l2Metrics = calculateL2Delays();
+        return { notStarted, startedLate, startOverdue, finishOverdue };
+      }, [db.l2Schedule]);
 
       const handleEmailTeam = () => {
         const emailList = currentMeta.distributionList || "";
         const subject = encodeURIComponent(`Minutes of Meeting: Nabinagar STPP WRM - Week #${weekNo}`);
-        const body = encodeURIComponent(`Dear Team,\n\nPlease find the summary for the Weekly Review Meeting (WRM) - Week #${weekNo}.\n\nSITE STATISTICS:\n- Deployed Manpower: ${currentMeta.manpower}\n- Trained Personnel: ${currentMeta.trained}\n\nEXECUTION HIGHLIGHTS:\n- Civil Targets Hit: ${getHitCount(civilWk)} / ${civilWk.length}\n- Pending Drawings: ${pendingDwgs}\n- Open Bottlenecks: ${openActs}\n- Open HSE & QA Issues: ${openHse + openQal}\n\nPlease find the detailed MoM and database backup attached.\n\nRegards,\nWRM Administrator`);
+        const body = encodeURIComponent(`Dear Team,\n\nPlease find the summary for the Weekly Review Meeting (WRM) - Week #${weekNo}.\n\nSITE STATISTICS:\n- Deployed Manpower: ${currentMeta.manpower}\n- Trained Personnel: ${currentMeta.trained}\n\nSCHEDULE HEALTH:\n- L2 Delayed Finishes: ${l2Metrics.finishOverdue}\n- Open Bottlenecks: ${openActs}\n\nDetailed MoM and JSON database backup attached.\n\nRegards,\nWRM Administrator`);
         window.location.href = `mailto:${emailList}?subject=${subject}&body=${body}`;
       };
 
-      // Safely map unique dropdowns to avoid React duplicate key errors
       const uniqueL2Parents = Array.from(new Set(db.l2Schedule.filter(l => l.discipline === activeDiscipline).map(l => l.desc))).filter(Boolean);
 
       return (
@@ -473,7 +477,7 @@
               </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 custom-scroll no-print relative">
+            <main className="flex-1 overflow-y-auto p-6 custom-scroll no-print">
               
               {selectedIds.length > 0 && (
                 <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-rose-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-fade-in">
@@ -486,45 +490,9 @@
                 </div>
               )}
 
-              {/* TAB VIEWS */}
-              {tab === "TEAM ROSTER" && (
-                <div className="space-y-6 fade-in pb-12">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
-                      <h2 className="text-sm font-black text-ntpc-blue uppercase tracking-wider">Project Team Master List</h2>
-                      <div className="flex gap-2">
-                        <button onClick={() => { setPasteType("Team"); setShowPasteModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase shadow">📋 Paste from Excel</button>
-                        <button onClick={() => handleAddRow("Team")} className="bg-ntpc-orange text-white px-4 py-2 rounded-lg text-xs font-black uppercase">+ Add Member</button>
-                      </div>
-                    </div>
-                    <table className="w-full text-left text-sm">
-                      <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.teamMaster.map(x=>x.id))} checked={selectedIds.length===db.teamMaster.length && db.teamMaster.length>0}/></th><th className="p-3 w-[15%]">Emp ID</th><th className="p-3 w-[25%]">Full Name</th><th className="p-3 w-[25%]">Designation</th><th className="p-3 w-[20%]">Department</th><th className="p-3 w-[15%]">Org</th><th className="p-3 w-10"></th></tr></thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {db.teamMaster.map((t, i) => (
-                          <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
-                            <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
-                            <td className="p-2"><input type="text" value={t.empId} onChange={e => handleTaskUpdates(t.id, {empId: e.target.value}, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"/></td>
-                            <td className="p-2"><input type="text" value={t.name} onChange={e => handleTaskUpdates(t.id, {name: e.target.value}, "teamMaster")} className="w-full bg-transparent border-b p-2 font-bold outline-none"/></td>
-                            <td className="p-2"><input type="text" value={t.desig} onChange={e => handleTaskUpdates(t.id, {desig: e.target.value}, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="e.g. HOP, GM"/></td>
-                            <td className="p-2"><input type="text" value={t.dept} onChange={e => handleTaskUpdates(t.id, {dept: e.target.value}, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none" placeholder="Department"/></td>
-                            <td className="p-2"><select value={t.org} onChange={e => handleTaskUpdates(t.id, {org: e.target.value}, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"><option>NTPC</option><option>TPL</option></select></td>
-                            <td className="p-2 text-center"><button onClick={()=>deleteIndividual("teamMaster", t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">MoM Email Distribution List</h3>
-                    <p className="text-[11px] text-slate-500 font-bold mb-3">These emails will automatically be filled when clicking "Email Team". Separate with commas.</p>
-                    <textarea rows="2" value={currentMeta.distributionList} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, distributionList: e.target.value}}}))} placeholder="e.g. hop@ntpc.co.in, pm@tpl.com" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg font-mono text-xs font-bold outline-none focus:border-ntpc-blue"></textarea>
-                  </div>
-                </div>
-              )}
-
               {tab === "DASHBOARD" && (
                 <div className="space-y-6 fade-in pb-8">
+                  {/* KPI Row 1: Team & Basics */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-4">Meeting Participants & Site Strength</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
@@ -542,7 +510,6 @@
                           ))}
                         </div>
                       </div>
-
                       <div>
                         <span className="text-xs font-black uppercase text-orange-600 block mb-3 border-b pb-2">M/s TPL Leadership Team</span>
                         <select onChange={e => toggleAttendee('TPL', e.target.value)} value="" className="w-full bg-slate-50 border p-2 rounded-lg text-xs font-bold outline-none cursor-pointer mb-3">
@@ -558,45 +525,49 @@
                         </div>
                       </div>
                     </div>
-
                     <div className="flex items-center gap-8 border-t pt-4">
                       <div><label className="text-xs font-bold uppercase text-slate-400 block mb-1">Total Site Manpower</label><input type="number" value={currentMeta.manpower} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, manpower: parseInt(e.target.value)||0}}}))} className="font-black text-2xl text-ntpc-blue bg-slate-50 border border-slate-300 rounded-lg p-2 w-32 outline-none text-center" /></div>
                       <div><label className="text-xs font-bold uppercase text-slate-400 block mb-1">Total Persons Trained</label><input type="number" value={currentMeta.trained} onChange={e => setDb(p=>({...p, weekMeta:{...p.weekMeta, [weekNo]:{...currentMeta, trained: parseInt(e.target.value)||0}}}))} className="font-black text-2xl text-emerald-600 bg-slate-50 border border-slate-300 rounded-lg p-2 w-32 outline-none text-center" /></div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-blue-600 uppercase tracking-wider">Civil Targets Met</div><div className="text-2xl font-black text-slate-800">{civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-blue-600 h-full transition-all" style={{width: `${civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(civilWk)} out of {civilWk.length} hit</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-amber-500 uppercase tracking-wider">Mech Targets Met</div><div className="text-2xl font-black text-slate-800">{mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-amber-500 h-full transition-all" style={{width: `${mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(mechWk)} out of {mechWk.length} hit</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-emerald-500 uppercase tracking-wider">Elec Targets Met</div><div className="text-2xl font-black text-slate-800">{elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%</div></div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full transition-all" style={{width: `${elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%`}}></div></div>
-                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(elecWk)} out of {elecWk.length} hit</div>
-                    </div>
-                  </div>
-                  
+                  {/* KPI Row 2: Deep Schedule Analytics */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Starts</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.delayedStarts}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Delayed Finishes</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.delayedFinishes}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Drawings</span><div className="text-3xl font-black text-amber-500 mt-1">{pendingDwgs}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Yet To Be Started</span><div className="text-3xl font-black text-slate-700 mt-1">{l2Metrics.notStarted}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Started Late</span><div className="text-3xl font-black text-amber-500 mt-1">{l2Metrics.startedLate}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Start Overdue</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.startOverdue}</div></div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">L2 Finish Overdue</span><div className="text-3xl font-black text-rose-600 mt-1">{l2Metrics.finishOverdue}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Bottlenecks</span><div className="text-3xl font-black text-rose-600 mt-1">{openActs}</div></div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Safety/QA</span><div className="text-3xl font-black text-ntpc-orange mt-1">{openHse + openQal}</div></div>
                   </div>
 
+                  {/* COMMODITY BAR CHART */}
+                  {commoditySummary.length > 0 && (
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Site-Wide Master Commodity Progress</h3>
+                      <p className="text-[11px] text-slate-400 font-bold uppercase mb-5">Aggregated visual tracking across all L2 Fronts</p>
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scroll">
+                        {commoditySummary.map(c => (
+                          <div key={c.task}>
+                            <div className="flex justify-between items-end mb-1">
+                              <span className="text-xs font-black uppercase text-slate-700">{c.task}</span>
+                              <span className="text-[10px] font-bold text-slate-500">{c.actual} / {c.scope} {c.uom} ({c.pct}%)</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden shadow-inner">
+                              <div className={`h-full transition-all ${c.pct === 100 ? 'bg-emerald-500' : 'bg-ntpc-blue'}`} style={{width: `${c.pct}%`}}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* L2 DIAGNOSTICS */}
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Contract L2 Schedule Variance Diagnostics</h3>
-                    <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated baseline cross-checking against Indian Standard Time (IST)</p>
-                    <DelayTracker title="Civil Works" tasks={civilWk} discipline="Civil" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Mechanical Works" tasks={mechWk} discipline="Mechanical" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Electrical Works" tasks={elecWk} discipline="Electrical" l2Schedule={db.l2Schedule} />
+                    <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated cross-checking against Indian Standard Time (IST) & Revised Baselines</p>
+                    <DelayTracker title="Civil Works" tasks={db.civilExecution.filter(t => t.weekNo === weekNo)} discipline="Civil" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Mechanical Works" tasks={db.mechExecution.filter(t => t.weekNo === weekNo)} discipline="Mechanical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Electrical Works" tasks={db.elecExecution.filter(t => t.weekNo === weekNo)} discipline="Electrical" l2Schedule={db.l2Schedule} />
                   </div>
                 </div>
               )}
@@ -623,23 +594,21 @@
 
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(computedBOQ.filter(x=>x.discipline===activeDiscipline).map(x=>x.id))} checked={selectedIds.length===computedBOQ.filter(x=>x.discipline===activeDiscipline).length && computedBOQ.filter(x=>x.discipline===activeDiscipline).length>0}/></th><th className="p-3 w-[15%] border-r border-slate-700">L2 Reference</th><th className="p-3 w-[10%] border-r border-slate-700">Branch/Structure</th><th className="p-3 w-[15%]">Task Name</th><th className="p-3 w-[5%] text-center border-r border-slate-700">UoM</th><th className="p-3 w-[8%] text-center bg-slate-800 text-blue-300">Total Scope</th><th className="p-3 w-[8%] text-center bg-slate-800 text-amber-300 border-r border-slate-700">Base Actuals</th><th className="p-3 w-[8%] text-center text-slate-300">App Actuals</th><th className="p-3 w-[9%] text-center text-emerald-400">Total Cum.</th><th className="p-3 w-[8%] text-center text-rose-300 border-r border-slate-700">Balance</th><th className="p-3 w-[15%]">% Progress</th><th className="p-3 w-8"></th></tr>
+                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(computedBOQ.filter(x=>x.discipline===activeDiscipline).map(x=>x.id))} checked={selectedIds.length===computedBOQ.filter(x=>x.discipline===activeDiscipline).length && computedBOQ.filter(x=>x.discipline===activeDiscipline).length>0}/></th><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%] border-r border-slate-700">Branch/Structure</th><th className="p-3 w-[15%]">Task Name</th><th className="p-3 w-[5%] text-center border-r border-slate-700">UoM</th><th className="p-3 w-[8%] text-center bg-slate-800 text-blue-300">Total Scope</th><th className="p-3 w-[8%] text-center bg-slate-800 text-amber-300 border-r border-slate-700">Base Actuals</th><th className="p-3 w-[8%] text-center text-slate-300">App Actuals</th><th className="p-3 w-[9%] text-center text-emerald-400">Total Cum.</th><th className="p-3 w-[8%] text-center text-rose-300 border-r border-slate-700">Balance</th><th className="p-3 w-[12%]">% Progress</th><th className="p-3 w-8"></th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {computedBOQ.filter(b => b.discipline === activeDiscipline).map((b) => (
                         <tr key={b.id} className={`hover:bg-slate-50 ${selectedIds.includes(b.id)?'bg-rose-50':''}`}>
                           <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(b.id)} onChange={() => toggleSelect(b.id)} className="w-4 h-4 cursor-pointer"/></td>
-                          <td className="p-2 border-r"><select value={b.l2Ref} onChange={e => handleTaskUpdates(b.id, {l2Ref: e.target.value, subFront: ""}, "masterBOQ")} className="w-full bg-slate-100 rounded p-2 font-bold text-xs text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
+                          <td className="p-2 border-r"><select value={b.l2Ref} onChange={e => handleTaskUpdates(b.id, {l2Ref: e.target.value, subFront: ""}, "masterBOQ")} className="w-full bg-slate-100 rounded p-2 font-bold text-[10px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{Array.from(new Set(db.l2Schedule.filter(l => l.discipline === activeDiscipline).map(l => l.desc))).filter(Boolean).map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                           <td className="p-2 border-r">
                             <input type="text" list={"boq-branch-" + b.id} value={b.subFront} onChange={e => handleTaskUpdates(b.id, {subFront: e.target.value}, "masterBOQ")} className="w-full bg-slate-100 p-2 rounded text-[10px] font-bold outline-none" placeholder="Branch" />
                             <datalist id={"boq-branch-" + b.id}>{Array.from(new Set(db.l2Schedule.filter(l => l.desc === b.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                           </td>
-                          <td className="p-2"><input type="text" list="standard-tasks" value={b.taskName} onChange={e => handleTaskUpdates(b.id, {taskName: e.target.value}, "masterBOQ")} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none focus:border-ntpc-orange" /></td>
+                          <td className="p-2"><input type="text" list="standard-tasks" value={b.taskName} onChange={e => handleTaskUpdates(b.id, {taskName: e.target.value}, "masterBOQ")} className="w-full bg-transparent border-b p-2 font-bold text-xs outline-none focus:border-ntpc-orange" /></td>
                           <td className="p-2 text-center border-r"><input type="text" value={b.uom} onChange={e => handleTaskUpdates(b.id, {uom: e.target.value}, "masterBOQ")} className="w-full bg-slate-100 text-center rounded p-2 text-xs font-bold outline-none" /></td>
-                          
-                          <td className="p-2"><input type="number" value={b.totalScope} onChange={e => handleTaskUpdates(b.id, {totalScope: e.target.value}, "masterBOQ")} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-blue-900 rounded p-2 text-sm outline-none" /></td>
-                          <td className="p-2 border-r"><input type="number" value={b.historicalActual} onChange={e => handleTaskUpdates(b.id, {historicalActual: e.target.value}, "masterBOQ")} className="w-full bg-amber-50 border border-amber-200 text-center font-bold text-amber-800 rounded p-2 text-sm outline-none" title="Progress achieved before using this app" /></td>
-                          
+                          <td className="p-2"><input type="number" value={b.totalScope} onChange={e => handleTaskUpdates(b.id, {totalScope: e.target.value}, "masterBOQ")} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-blue-900 rounded p-2 text-xs outline-none" /></td>
+                          <td className="p-2 border-r"><input type="number" value={b.historicalActual} onChange={e => handleTaskUpdates(b.id, {historicalActual: e.target.value}, "masterBOQ")} className="w-full bg-amber-50 border border-amber-200 text-center font-bold text-amber-800 rounded p-2 text-xs outline-none" title="Progress achieved before using this app" /></td>
                           <td className="p-2 text-center font-bold text-slate-500 bg-slate-50/50 text-xs">{b.appActuals}</td>
                           <td className="p-2 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs">{b.totalCum}</td>
                           <td className="p-2 text-center font-bold text-rose-700 bg-rose-50/30 border-r text-xs">{b.balance}</td>
@@ -668,7 +637,10 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.l2Schedule.map(x=>x.id))} checked={selectedIds.length===db.l2Schedule.length && db.l2Schedule.length>0}/></th><th className="p-3 w-[15%]">Discipline</th><th className="p-3 w-[25%] border-r border-slate-700">L2 Parent Name</th><th className="p-3 w-[15%]">Sub-Front/Branch</th><th className="p-3 text-center">Baseline Start</th><th className="p-3 text-center">Actual Start</th><th className="p-3 text-center">Baseline Finish</th><th className="p-3 text-center">Actual Finish</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead>
+                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-8 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(db.l2Schedule.map(x=>x.id))} checked={selectedIds.length===db.l2Schedule.length && db.l2Schedule.length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Identification</th><th colSpan="3" className="p-3 text-center bg-blue-950 border-r border-slate-700">Start Target Engine</th><th colSpan="3" className="p-3 text-center bg-amber-950">Finish Target Engine</th><th className="p-3 w-8" rowSpan="2"></th></tr>
+                      <tr className="bg-slate-100 text-slate-700 text-[10px] uppercase sticky-th-sub"><th className="p-2 w-[8%]">Discipline</th><th className="p-2 w-[16%]">L2 Parent Name</th><th className="p-2 w-[12%] border-r border-slate-300">Sub-Front/Branch</th><th className="p-2 w-[8%] text-center">Base Start</th><th className="p-2 w-[8%] text-center text-ntpc-blue">Rev. Start</th><th className="p-2 w-[8%] text-center border-r border-slate-300 text-emerald-700">Act. Start</th><th className="p-2 w-[8%] text-center">Base Fin</th><th className="p-2 w-[8%] text-center text-ntpc-orange">Rev. Fin</th><th className="p-2 w-[8%] text-center text-emerald-700">Act. Fin</th></tr>
+                    </thead>
                     <tbody className="divide-y divide-slate-100">
                       {db.l2Schedule.map((l, i) => {
                         const status = getL2DelayStatus(l);
@@ -677,15 +649,17 @@
                         return (
                           <tr key={l.id} className={`hover:bg-slate-50 ${selectedIds.includes(l.id)?'bg-rose-100' : rowDelayed ? 'bg-rose-50/80' : ''}`}>
                             <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => toggleSelect(l.id)} className="w-4 h-4 cursor-pointer"/></td>
-                            <td className="p-2"><select value={l.discipline} onChange={e => handleTaskUpdates(l.id, {discipline: e.target.value}, "l2Schedule")} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
-                            <td className="p-2 border-r"><input type="text" value={l.desc} onChange={e => handleTaskUpdates(l.id, {desc: e.target.value}, "l2Schedule")} placeholder="e.g. Wagon Tippler" className={`w-full bg-transparent border-b p-2 font-bold outline-none ${rowDelayed ? 'text-rose-900' : ''}`} /></td>
-                            <td className="p-2"><input type="text" value={l.subFront} onChange={e => handleTaskUpdates(l.id, {subFront: e.target.value}, "l2Schedule")} placeholder="e.g. WT-1" className={`w-full bg-slate-100 p-2 rounded text-xs font-bold outline-none ${rowDelayed ? 'text-rose-900' : ''}`} /></td>
+                            <td className="p-2"><select value={l.discipline} onChange={e => handleTaskUpdates(l.id, {discipline: e.target.value}, "l2Schedule")} className="w-full bg-slate-100 font-bold p-2 rounded text-[10px] outline-none"><option>Civil</option><option>Mechanical</option><option>Electrical</option></select></td>
+                            <td className="p-2"><input type="text" value={l.desc} onChange={e => handleTaskUpdates(l.id, {desc: e.target.value}, "l2Schedule")} placeholder="e.g. Wagon Tippler" className={`w-full bg-transparent border-b p-2 font-bold text-xs outline-none ${rowDelayed ? 'text-rose-900' : ''}`} /></td>
+                            <td className="p-2 border-r"><input type="text" value={l.subFront} onChange={e => handleTaskUpdates(l.id, {subFront: e.target.value}, "l2Schedule")} placeholder="e.g. WT-1" className={`w-full bg-slate-100 p-2 rounded text-[10px] font-bold outline-none ${rowDelayed ? 'text-rose-900' : ''}`} /></td>
                             
-                            <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => handleTaskUpdates(l.id, {l2Start: e.target.value}, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isStartOverdue ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-slate-100'}`} /></td>
-                            <td className="p-2 text-center"><input type="date" value={l.actStart} onChange={e => handleTaskUpdates(l.id, {actStart: e.target.value}, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isStartOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-blue-50 text-blue-900'}`} /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.l2Start} onChange={e => handleTaskUpdates(l.id, {l2Start: e.target.value}, "l2Schedule")} className="bg-slate-100 p-2 rounded text-[10px] font-bold outline-none w-full" /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.revStart} onChange={e => handleTaskUpdates(l.id, {revStart: e.target.value}, "l2Schedule")} className="bg-blue-50/50 p-2 rounded text-[10px] font-bold outline-none w-full text-blue-900 border border-blue-200" title="Overrides Baseline Start" /></td>
+                            <td className="p-2 text-center border-r"><input type="date" value={l.actStart} onChange={e => handleTaskUpdates(l.id, {actStart: e.target.value}, "l2Schedule")} className={`p-2 rounded text-[10px] font-bold outline-none w-full ${status.isStartOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-emerald-50 text-emerald-900 border border-emerald-200'}`} /></td>
                             
-                            <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => handleTaskUpdates(l.id, {l2End: e.target.value}, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isFinishOverdue ? 'bg-rose-100 text-rose-900 border border-rose-300' : 'bg-slate-100'}`} /></td>
-                            <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => handleTaskUpdates(l.id, {actEnd: e.target.value}, "l2Schedule")} className={`p-2 rounded text-xs font-bold outline-none w-full ${status.isFinishOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-blue-50 text-blue-900'}`} /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.l2End} onChange={e => handleTaskUpdates(l.id, {l2End: e.target.value}, "l2Schedule")} className="bg-slate-100 p-2 rounded text-[10px] font-bold outline-none w-full" /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.revEnd} onChange={e => handleTaskUpdates(l.id, {revEnd: e.target.value}, "l2Schedule")} className="bg-amber-50/50 p-2 rounded text-[10px] font-bold outline-none w-full text-amber-900 border border-amber-200" title="Overrides Baseline Finish" /></td>
+                            <td className="p-2 text-center"><input type="date" value={l.actEnd} onChange={e => handleTaskUpdates(l.id, {actEnd: e.target.value}, "l2Schedule")} className={`p-2 rounded text-[10px] font-bold outline-none w-full ${status.isFinishOverdue ? 'bg-rose-200 text-rose-900 border-2 border-rose-500 shadow-inner' : 'bg-emerald-50 text-emerald-900 border border-emerald-200'}`} /></td>
                             
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual("l2Schedule", l.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
@@ -714,8 +688,8 @@
 
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(activeTasks.map(x=>x.id))} checked={selectedIds.length===activeTasks.length && activeTasks.length>0}/></th><th colSpan="4" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
-                      <tr className="bg-slate-100 text-slate-700 text-[10px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(activeTasks.map(x=>x.id))} checked={selectedIds.length===activeTasks.length && activeTasks.length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
+                      <tr className="bg-slate-100 text-slate-700 text-[11px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[15%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {activeTasks.map((t) => {
@@ -724,22 +698,22 @@
                         const col = activeDiscipline === "Civil" ? "civilExecution" : activeDiscipline === "Mechanical" ? "mechExecution" : "elecExecution";
                         return (
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
-                            <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
-                            <td className="p-1.5"><select value={t.l2Ref} onChange={e => handleTaskUpdates(t.id, {l2Ref: e.target.value, subFront: ""}, col)} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
-                            <td className="p-1.5">
+                            <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
+                            <td className="p-2"><select value={t.l2Ref} onChange={e => handleTaskUpdates(t.id, {l2Ref: e.target.value, subFront: ""}, col)} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{Array.from(new Set(db.l2Schedule.filter(l => l.discipline === activeDiscipline).map(l => l.desc))).filter(Boolean).map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
+                            <td className="p-2">
                               <input type="text" list={"branch-" + t.id} value={t.subFront} onChange={e => handleTaskUpdates(t.id, {subFront: e.target.value}, col)} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
                               <datalist id={"branch-" + t.id}>{Array.from(new Set(db.l2Schedule.filter(l => l.desc === t.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                             </td>
-                            <td className="p-1.5"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskUpdates(t.id, {taskName: e.target.value}, col)} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none focus:border-ntpc-orange" /></td>
-                            <td className="p-1.5 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskUpdates(t.id, {unit: e.target.value}, col)} className="w-8 bg-slate-100 text-center rounded p-1.5 text-[9px] font-bold outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.plan} onChange={e => handleTaskUpdates(t.id, {plan: e.target.value}, col)} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-ntpc-blue rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.act} onChange={e => handleTaskUpdates(t.id, {act: e.target.value}, col)} className="w-full bg-emerald-50 border border-emerald-200 text-center font-bold text-emerald-800 rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className={`p-1.5 text-center font-black text-[10px] rounded ${varColor}`}>{variance > 0 ? `+${variance}` : variance}</td>
-                            <td className="p-1.5 border-r"><input type="number" value={t.cumBacklog} onChange={e => handleTaskUpdates(t.id, {cumBacklog: e.target.value}, col)} className="w-full bg-rose-50 border border-rose-200 text-center font-black text-rose-700 rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
+                            <td className="p-2"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskUpdates(t.id, {taskName: e.target.value}, col)} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none focus:border-ntpc-orange" /></td>
+                            <td className="p-2 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskUpdates(t.id, {unit: e.target.value}, col)} className="w-8 bg-slate-100 text-center rounded p-1.5 text-[9px] font-bold outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.plan} onChange={e => handleTaskUpdates(t.id, {plan: e.target.value}, col)} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-ntpc-blue rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.act} onChange={e => handleTaskUpdates(t.id, {act: e.target.value}, col)} className="w-full bg-emerald-50 border border-emerald-200 text-center font-bold text-emerald-800 rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className={`p-2 text-center font-black text-[10px] rounded ${varColor}`}>{variance > 0 ? `+${variance}` : variance}</td>
+                            <td className="p-2 border-r"><input type="number" value={t.cumBacklog} onChange={e => handleTaskUpdates(t.id, {cumBacklog: e.target.value}, col)} className="w-full bg-rose-50 border border-rose-200 text-center font-black text-rose-700 rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
+                            <td className="p-2"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual(col, t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         );
@@ -760,18 +734,18 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.drawings.filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===db.drawings.filter(x=>x.weekNo===weekNo).length && db.drawings.filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(db.drawings.filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===db.drawings.filter(x=>x.weekNo===weekNo).length && db.drawings.filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[12%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {db.drawings.filter(d => d.weekNo === weekNo).map((d) => (
                         <tr key={d.id} className={`hover:bg-slate-50 ${selectedIds.includes(d.id)?'bg-rose-50':''}`}>
                           <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} className="w-4 h-4 cursor-pointer"/></td>
-                          <td className="p-1.5"><select value={d.l2Ref} onChange={e => handleTaskUpdates(d.id, {l2Ref: e.target.value, subFront: ""}, "drawings")} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
+                          <td className="p-1.5"><select value={d.l2Ref} onChange={e => handleTaskUpdates(d.id, {l2Ref: e.target.value, subFront: ""}, "drawings")} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{Array.from(new Set(db.l2Schedule.map(l => l.desc))).filter(Boolean).map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                           <td className="p-1.5 border-r">
                             <input type="text" list={"dwg-branch-" + d.id} value={d.subFront} onChange={e => handleTaskUpdates(d.id, {subFront: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
                             <datalist id={"dwg-branch-" + d.id}>{Array.from(new Set(db.l2Schedule.filter(l => l.desc === d.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                           </td>
                           <td className="p-1.5"><input type="text" value={d.drawingNo} onChange={e => handleTaskUpdates(d.id, {drawingNo: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded font-bold text-[10px] outline-none" /></td>
-                          <td className="p-1.5"><input type="text" value={d.desc} onChange={e => handleTaskUpdates(d.id, {desc: e.target.value}, "drawings")} className="w-full bg-transparent border-b p-1.5 font-bold text-sm outline-none" /></td>
+                          <td className="p-1.5"><input type="text" value={d.desc} onChange={e => handleTaskUpdates(d.id, {desc: e.target.value}, "drawings")} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none" /></td>
                           <td className="p-1.5"><select value={d.priority} onChange={e => handleTaskUpdates(d.id, {priority: e.target.value}, "drawings")} className={`w-full p-1.5 rounded text-[9px] font-black text-center outline-none cursor-pointer ${d.priority === 'High' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}><option>High</option><option>Moderate</option><option>Low</option></select></td>
                           <td className="p-1.5 text-center"><input type="date" value={d.targetDate} onChange={e => handleTaskUpdates(d.id, {targetDate: e.target.value}, "drawings")} className="bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" /></td>
                           <td className="p-1.5 text-center">
@@ -897,7 +871,7 @@
                 <h3 className="text-sm font-black uppercase text-ntpc-blue">Paste {pasteType} Rows from Excel</h3>
                 <p className="text-[11px] text-slate-500 font-bold">
                   {pasteType === "Team" ? "Columns: [Emp ID | Full Name | Designation | Department | Org]"
-                   : pasteType === "L2" ? "Columns: [Discipline | L2 Parent | Branch/Structure | L2 Start | Act Start | L2 End | Act End]" 
+                   : pasteType === "L2" ? "Columns: [Discipline | L2 Parent | Branch/Structure | Base Start | Rev Start | Act Start | Base Fin | Rev Fin | Act Fin]" 
                    : pasteType === "BOQ" ? "Columns: [Discipline | L2 Parent | Branch/Structure | Task Name | UoM | Total Scope | Historical Actual]"
                    : pasteType === "Drawings" ? "Columns: [L2 Parent | Branch/Structure | Discipline | Dwg No | Desc | Priority | Target | Expected | Status | Impact | Remarks]"
                    : pasteType === "Actions" ? "Columns: [Category | Description | Resp | Target | Revised | Status | NTPC Remarks]"
@@ -956,7 +930,7 @@
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5">
                 <h3 className="text-lg font-black uppercase text-ntpc-blue">Configure A4 Print MoM</h3>
-                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Dashboard & BOQ</label>
+                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Dashboard & BOQ Summary</label>
                 <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludePhotos} onChange={e => setPrintIncludePhotos(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Safety/QA Photos</label>
                 <div className="flex gap-2">
                   <button onClick={() => setShowPrintModal(false)} className="flex-1 bg-slate-100 py-2.5 rounded-lg text-xs font-black uppercase hover:bg-slate-200">Cancel</button>
@@ -1005,42 +979,31 @@
                       <td className="text-center font-bold text-emerald-800">{getHitCount(elecWk)} / {elecWk.length}</td>
                       <td className="text-center font-bold">{pendingDwgs}</td>
                       <td className="text-center font-bold text-rose-700">{openActs}</td>
-                      <td className="text-center font-bold">{openHse + openQal}</td>
+                      <td className="text-center font-bold">{openHse + db.qualityLogs.filter(q => q.weekNo === weekNo && q.status === "Open").length}</td>
                     </tr>
                   </tbody>
                 </table>
-                
-                {computedBOQ.length > 0 && (
+
+                {commoditySummary.length > 0 && (
                   <React.Fragment>
-                    <h3 className="section-title">3. Master BOQ Progress Tracking (Cumulative)</h3>
-                    <table>
-                      <thead><tr><th>Discipline</th><th>L2 Ref & Branch</th><th>Task Name</th><th className="text-center">UoM</th><th className="text-center">Total Scope</th><th className="text-center">Cum. Actual</th><th className="text-center">Balance</th><th>% Complete</th></tr></thead>
-                      <tbody>
-                        {computedBOQ.map((b, i) => (
-                          <tr key={i}>
-                            <td>{b.discipline}</td>
-                            <td><strong>{b.l2Ref}</strong><br/>{b.subFront}</td>
-                            <td>{b.taskName}</td>
-                            <td className="text-center">{b.uom}</td>
-                            <td className="text-center">{b.totalScope}</td>
-                            <td className="text-center font-bold text-emerald-800">{b.totalCum}</td>
-                            <td className="text-center text-rose-800">{b.balance}</td>
-                            <td>
-                              <div className="flex items-center gap-2">
-                                <span className="w-8 font-bold text-[10px]">{b.pct}%</span>
-                                <div className="print-progress-bar w-full"><div className="print-progress-fill" style={{width: `${b.pct}%`}}></div></div>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <h3 className="section-title">3. Site-Wide Commodity Progress</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                      {commoditySummary.map((c, i) => (
+                        <div key={i} style={{ border: '1px solid #cbd5e1', padding: '8px', borderRadius: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '10px', textTransform: 'uppercase' }}>{c.task}</strong>
+                            <span style={{ fontSize: '9px' }}>{c.actual} / {c.scope} {c.uom} ({c.pct}%)</span>
+                          </div>
+                          <div className="print-progress-bar w-full"><div className="print-progress-fill" style={{width: `${c.pct}%`}}></div></div>
+                        </div>
+                      ))}
+                    </div>
                   </React.Fragment>
                 )}
               </React.Fragment>
             )}
 
-            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "4" : printIncludeDashboard ? "3" : "2"}. Discipline Execution Performance</h3>
+            <h3 className="section-title">{printIncludeDashboard && commoditySummary.length > 0 ? "4" : printIncludeDashboard ? "3" : "2"}. Discipline Execution Performance</h3>
             <table>
               <thead><tr><th className="w-[22%]">Work Front & Task</th><th className="text-center w-10">Plan</th><th className="text-center w-10">Act</th><th className="text-center w-10">Var</th><th className="text-center w-10">Backlog</th><th className="w-[18%]">Hindrance</th><th className="w-[18%]">TPL Remarks</th><th className="w-[18%]">NTPC Directives</th></tr></thead>
               <tbody>
@@ -1060,7 +1023,7 @@
             <div className="page-break"></div>
             <div className="print-header-box"><h1 className="print-title">Nabinagar Super Thermal Power Project</h1><div className="header-gradient-line"></div></div>
 
-            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "5" : printIncludeDashboard ? "4" : "3"}. Priority Actions & Bottlenecks</h3>
+            <h3 className="section-title">{printIncludeDashboard && commoditySummary.length > 0 ? "5" : printIncludeDashboard ? "4" : "3"}. Priority Actions & Bottlenecks</h3>
             <table>
               <thead><tr><th className="w-[30%]">Action Description</th><th className="w-[15%]">Resp</th><th className="text-center w-[15%]">Target</th><th className="text-center w-[10%]">Status</th><th className="w-[30%]">NTPC Review Directives</th></tr></thead>
               <tbody>
@@ -1074,7 +1037,7 @@
               </tbody>
             </table>
 
-            <h3 className="section-title">{printIncludeDashboard && computedBOQ.length > 0 ? "6" : printIncludeDashboard ? "5" : "4"}. HSE & Quality Assurance Logs</h3>
+            <h3 className="section-title">{printIncludeDashboard && commoditySummary.length > 0 ? "6" : printIncludeDashboard ? "5" : "4"}. HSE & Quality Assurance Logs</h3>
             <table>
               <thead><tr><th className="w-[20%]">Dept & Category</th><th className="w-[50%]">Observation Detail</th><th className="text-center w-[15%]">Status</th>{printIncludePhotos && <th className="text-center w-[15%]">Evidence</th>}</tr></thead>
               <tbody>
