@@ -26,7 +26,6 @@
     .sticky-th { position: sticky; top: 0; z-index: 20; }
     .sticky-th-sub { position: sticky; top: 38px; z-index: 19; }
 
-    /* PROFESSIONAL A4 PORTRAIT PRINT CSS */
     @media print {
       body { background: white !important; font-family: 'Arial', sans-serif; -webkit-print-color-adjust: exact; overflow: visible; font-size: 11px; }
       .no-print { display: none !important; }
@@ -56,9 +55,8 @@
     const { useState, useEffect, useMemo, useRef, Component } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-    const STORAGE_KEY = "ntpc_wrm_projector_v21_stable";
+    const STORAGE_KEY = "ntpc_wrm_projector_v19_stable";
 
-    // GLOBAL ERROR BOUNDARY
     class ErrorBoundary extends Component {
       constructor(props) { super(props); this.state = { hasError: false, error: null }; }
       static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -69,7 +67,7 @@
             <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white p-8">
               <div className="w-16 h-16 bg-rose-600 rounded-xl flex items-center justify-center text-3xl mb-4">⚠️</div>
               <h1 className="text-2xl font-black uppercase mb-2">Safe Recovery Mode</h1>
-              <p className="text-slate-400 mb-6 text-center max-w-lg">A structural render error was safely intercepted. Clear your cache below to restore default configuration.</p>
+              <p className="text-slate-400 mb-6 text-center max-w-lg">A structural render error occurred. Your database is safe. Clear the cache below to instantly resolve this.</p>
               <div className="flex gap-4">
                 <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-rose-600 hover:bg-rose-500 transition px-6 py-3 rounded-lg font-bold">Clear Local Cache & Reload</button>
                 <button onClick={() => window.location.reload()} className="bg-ntpc-blue hover:bg-blue-500 transition px-6 py-3 rounded-lg font-bold">↻ Standard Reload</button>
@@ -256,7 +254,7 @@
       });
       
       const [history, setHistory] = useState([]);
-      const [cloudStatusMsg, setCloudStatusMsg] = useState("Idle (Local Cache Active)");
+      const [showCloudModal, setShowCloudModal] = useState(false);
       const [cloudLoading, setCloudLoading] = useState(false);
 
       const setDb = (updater) => {
@@ -269,23 +267,15 @@
       };
 
       const handlePushToCloud = () => {
-        setCloudLoading(true);
-        setCloudStatusMsg("Uploading to Firebase...");
+        setCloudLoading("Uploading to Server...");
         fetch(FIREBASE_URL, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(db) })
-          .then(() => { 
-            setCloudStatusMsg("Upload Successful (Cloud Updated)"); 
-            alert("Success! All local data successfully pushed to cloud."); 
-          })
-          .catch(err => {
-            setCloudStatusMsg("Upload Failed");
-            alert("Upload Failed: Check network connection or Firebase rules.");
-          })
+          .then(() => { alert("Success! Database pushed to cloud."); setShowCloudModal(false); })
+          .catch(err => alert("Upload Failed: Check internet connection."))
           .finally(() => setCloudLoading(false));
       };
 
       const handlePullFromCloud = () => {
-        setCloudLoading(true);
-        setCloudStatusMsg("Downloading from Firebase...");
+        setCloudLoading("Downloading from Server...");
         fetch(FIREBASE_URL)
           .then(res => res.json())
           .then(data => {
@@ -293,17 +283,13 @@
               const cleanData = sanitizeDB(data);
               setDbState(cleanData);
               localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData));
-              setCloudStatusMsg("Download Successful (Local Synced)");
               alert("Success! Latest data pulled from cloud.");
+              setShowCloudModal(false);
             } else { 
-              setCloudStatusMsg("Cloud Database Empty");
-              alert("Cloud database returned empty data.");
+              alert("Cloud database is empty.");
             }
           })
-          .catch(err => {
-            setCloudStatusMsg("Download Failed");
-            alert("Download Failed: Network error or bad Firebase URL.");
-          })
+          .catch(err => alert("Download Failed: Cloud DB error."))
           .finally(() => setCloudLoading(false));
       };
 
@@ -353,20 +339,7 @@
       useEffect(() => { setSelectedIds([]); }, [tab, activeDiscipline]);
 
       const currentMeta = (db.weekMeta && db.weekMeta[weekNo]) ? db.weekMeta[weekNo] : { manpower: 0, trained: 0, ntpcAttendees: [], tplAttendees: [], distributionList: "" };
-      
-      const civilWk = ensureArray(db.civilExecution).filter(t => t && t.weekNo === weekNo);
-      const mechWk = ensureArray(db.mechExecution).filter(t => t && t.weekNo === weekNo);
-      const elecWk = ensureArray(db.elecExecution).filter(t => t && t.weekNo === weekNo);
-      
-      const getHitCount = (arr) => ensureArray(arr).filter(t => t && parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
-      
-      const pendingDwgs = ensureArray(db.drawings).filter(d => d && d.weekNo === weekNo && !String(d.status).includes("Approved")).length;
-      const openActs = ensureArray(db.actions).filter(a => a && a.weekNo === weekNo && a.status !== "Completed").length;
-      
-      const openHse = ensureArray(db.safetyLogs).filter(s => s && s.weekNo === weekNo && s.status === "Open").length;
-      const openQal = ensureArray(db.qualityLogs).filter(q => q && q.weekNo === weekNo && q.status === "Open").length;
-
-      const activeTasks = activeDiscipline === "Civil" ? civilWk : activeDiscipline === "Mechanical" ? mechWk : elecWk;
+      const activeTasks = ensureArray(activeDiscipline === "Civil" ? db.civilExecution : activeDiscipline === "Mechanical" ? db.mechExecution : db.elecExecution).filter(t => t.weekNo === weekNo);
       
       const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
       const toggleSelectAll = (ids) => setSelectedIds(prev => prev.length === ids.length ? [] : ids);
@@ -493,13 +466,13 @@
       };
 
       const toggleAttendee = (org, id) => {
-        const emp = ensureArray(db.teamMaster).find(t => t && t.id === id); 
+        const emp = ensureArray(db.teamMaster).find(t => t.id === id); 
         if (!emp) return;
         setDb(prev => {
           const field = org === 'NTPC' ? 'ntpcAttendees' : 'tplAttendees';
           const currentList = (prev.weekMeta && prev.weekMeta[weekNo] && prev.weekMeta[weekNo][field]) ? prev.weekMeta[weekNo][field] : [];
-          const exists = currentList.find(a => a && a.id === id);
-          let newList = exists ? currentList.filter(a => a && a.id !== id) : [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
+          const exists = ensureArray(currentList).find(a => a.id === id);
+          let newList = exists ? currentList.filter(a => a.id !== id) : [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
           return { ...prev, weekMeta: { ...prev.weekMeta, [weekNo]: { ...(prev.weekMeta[weekNo] || {}), [field]: newList } } };
         });
       };
@@ -530,6 +503,16 @@
         }).sort((a,b) => b.scope - a.scope);
       }, [computedBOQ]);
 
+      // --- MISSING VARIABLE DECLARATIONS RESTORED HERE ---
+      const civilWk = ensureArray(db.civilExecution).filter(t => t && t.weekNo === weekNo);
+      const mechWk = ensureArray(db.mechExecution).filter(t => t && t.weekNo === weekNo);
+      const elecWk = ensureArray(db.elecExecution).filter(t => t && t.weekNo === weekNo);
+      
+      const getHitCount = (arr) => ensureArray(arr).filter(t => parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
+      const pendingDwgs = ensureArray(db.drawings).filter(d => d.weekNo === weekNo && !String(d.status).includes("Approved")).length;
+      const openActs = ensureArray(db.actions).filter(a => a.weekNo === weekNo && a.status !== "Completed").length;
+      const openHse = ensureArray(db.safetyLogs).filter(s => s && s.weekNo === weekNo && s.status === "Open").length;
+      
       const l2Metrics = useMemo(() => {
         let notStarted = 0, startedLate = 0, startOverdue = 0, finishOverdue = 0;
         ensureArray(db.l2Schedule).forEach(l => {
@@ -545,7 +528,7 @@
       const handleEmailTeam = () => {
         const emailList = currentMeta.distributionList || "";
         const subject = encodeURIComponent(`Minutes of Meeting: Nabinagar STPP WRM - Week #${weekNo}`);
-        const body = encodeURIComponent(`Dear Team,\n\nPlease find the summary for the Weekly Review Meeting (WRM) - Week #${weekNo}.\n\nSITE STATISTICS:\n- Deployed Manpower: ${currentMeta.manpower}\n- Trained Personnel: ${currentMeta.trained}\n\nSCHEDULE HEALTH:\n- L2 Delayed Finishes: ${l2Metrics.finishOverdue}\n- Open Bottlenecks: ${openActs}\n- Open HSE & QA Issues: ${openHse + openQal}\n\nDetailed MoM and JSON database backup attached.\n\nRegards,\nWRM Administrator`);
+        const body = encodeURIComponent(`Dear Team,\n\nPlease find the summary for the Weekly Review Meeting (WRM) - Week #${weekNo}.\n\nSITE STATISTICS:\n- Deployed Manpower: ${currentMeta.manpower}\n- Trained Personnel: ${currentMeta.trained}\n\nSCHEDULE HEALTH:\n- L2 Delayed Finishes: ${l2Metrics.finishOverdue}\n- Open Bottlenecks: ${openActs}\n\nDetailed MoM and JSON database backup attached.\n\nRegards,\nWRM Administrator`);
         window.location.href = `mailto:${emailList}?subject=${subject}&body=${body}`;
       };
 
@@ -565,17 +548,7 @@
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto custom-scroll">
-              {[ 
-                { id: "DASHBOARD", icon: "📊", label: "Executive Summary" }, 
-                { id: "TEAM ROSTER", icon: "👥", label: "Master Team List" }, 
-                { id: "L2 SCHEDULE", icon: "📅", label: "L2 Master Fronts" }, 
-                { id: "PROGRESS", icon: "📈", label: "Master BOQ Progress" }, 
-                { id: "EXECUTION", icon: "🏗️", label: "Discipline Execution" }, 
-                { id: "DRAWINGS", icon: "📐", label: "Engineering & DCI" }, 
-                { id: "HSE & QA", icon: "🛡️", label: "HSE & Quality NCR" }, 
-                { id: "ACTIONS", icon: "⚡", label: "Bottlenecks Tracker" },
-                { id: "CLOUD_HUB", icon: "☁️", label: "Cloud Sync Hub" }
-              ].map(m => (
+              {[ { id: "DASHBOARD", icon: "📊", label: "Executive Summary" }, { id: "TEAM ROSTER", icon: "👥", label: "Master Team List" }, { id: "L2 SCHEDULE", icon: "📅", label: "L2 Master Fronts" }, { id: "PROGRESS", icon: "📈", label: "Master BOQ Progress" }, { id: "EXECUTION", icon: "🏗️", label: "Discipline Execution" }, { id: "DRAWINGS", icon: "📐", label: "Engineering & DCI" }, { id: "HSE & QA", icon: "🛡️", label: "HSE & Quality NCR" }, { id: "ACTIONS", icon: "⚡", label: "Bottlenecks Tracker" } ].map(m => (
                 <button key={m.id} onClick={() => setTab(m.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${tab === m.id ? "bg-ntpc-orange text-white shadow-md" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
                   <span className="text-lg">{m.icon}</span>{m.label}
                 </button>
@@ -605,9 +578,7 @@
                       const rollD = ensureArray(prev.drawings).filter(d => d.weekNo === weekNo && !String(d.status).includes("Approved")).map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
                       const rollA = ensureArray(prev.actions).filter(a => a.weekNo === weekNo && a.status !== "Completed").map(a => ({...a, id: "ACT-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
                       return { 
-                        ...prev, 
-                        currentWeek: nx, 
-                        weeks: [nx, ...ensureArray(prev.weeks)], 
+                        ...prev, currentWeek: nx, weeks: [nx, ...ensureArray(prev.weeks)], 
                         weekMeta: { ...(prev.weekMeta || {}), [nx]: (prev.weekMeta||{})[weekNo] || {} }, 
                         civilExecution: [...roll(prev.civilExecution), ...ensureArray(prev.civilExecution)], 
                         mechExecution: [...roll(prev.mechExecution), ...ensureArray(prev.mechExecution)], 
@@ -622,7 +593,7 @@
               </div>
 
               <div className="flex items-center gap-3">
-                <button onClick={() => setTab("CLOUD_HUB")} className="bg-ntpc-navy hover:bg-blue-900 text-white px-5 py-2 rounded-lg text-xs font-black uppercase shadow-lg border border-blue-400">☁️ Cloud Hub</button>
+                <button onClick={() => setShowCloudModal(true)} className="bg-ntpc-navy hover:bg-blue-900 text-white px-5 py-2 rounded-lg text-xs font-black uppercase shadow-lg border border-blue-400">☁️ Cloud Hub</button>
                 <button onClick={exportToExcel} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-emerald-100 transition flex items-center gap-2">📥 Export Excel</button>
                 <button onClick={handleEmailTeam} className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-amber-100 transition flex items-center gap-2">✉️ Email Team</button>
                 <button onClick={() => setShowPrintModal(true)} className="bg-ntpc-blue hover:bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-extrabold uppercase shadow">🖨️ Print MoM</button>
@@ -635,69 +606,24 @@
                 <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-rose-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 animate-fade-in">
                   <span className="font-bold text-sm">{selectedIds.length} Rows Selected</span>
                   <button onClick={() => {
-                    const col = tab === "L2 SCHEDULE" ? "l2Schedule" : tab === "TEAM ROSTER" ? "teamMaster" : tab === "PROGRESS" ? "masterBOQ" : tab === "DRAWINGS" ? "drawings" : tab === "ACTIONS" ? "actions" : tab === "HSE & QA" ? "safetyLogs" : activeDiscipline==="Civil" ? "civilExecution" : activeDiscipline==="Mechanical" ? "mechExecution" : "elecExecution";
+                    if (tab === "HSE & QA") {
+                      if(!confirm(`Delete ${selectedIds.length} items?`)) return;
+                      setDb(prev => ({
+                        ...prev,
+                        safetyLogs: ensureArray(prev.safetyLogs).filter(item => !selectedIds.includes(item.id)),
+                        qualityLogs: ensureArray(prev.qualityLogs).filter(item => !selectedIds.includes(item.id)),
+                      }));
+                      setSelectedIds([]);
+                      return;
+                    }
+                    const col = tab === "L2 SCHEDULE" ? "l2Schedule" : tab === "TEAM ROSTER" ? "teamMaster" : tab === "PROGRESS" ? "masterBOQ" : tab === "DRAWINGS" ? "drawings" : tab === "ACTIONS" ? "actions" : activeDiscipline==="Civil" ? "civilExecution" : activeDiscipline==="Mechanical" ? "mechExecution" : "elecExecution";
                     deleteSelected(col);
                   }} className="bg-white text-rose-600 px-4 py-1.5 rounded-full text-xs font-black uppercase hover:bg-rose-50">Delete Selected</button>
                   <button onClick={() => setSelectedIds([])} className="text-rose-200 hover:text-white font-bold text-xs">Cancel</button>
                 </div>
               )}
 
-              {/* DEDICATED FULL-PAGE CLOUD HUB */}
-              {tab === "CLOUD_HUB" && (
-                <div className="max-w-4xl mx-auto space-y-6 fade-in pb-12">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between border-b pb-4 mb-6">
-                      <div>
-                        <h2 className="text-lg font-black text-ntpc-navy uppercase tracking-wider">Cloud Command Center</h2>
-                        <p className="text-xs text-slate-500 font-bold mt-1">Direct synchronization gateway between local browser memory and Google Firebase</p>
-                      </div>
-                      <span className="text-xs font-extrabold px-3 py-1.5 rounded-full bg-blue-50 text-ntpc-blue border border-blue-200">Status: {cloudStatusMsg}</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                      <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
-                        <div>
-                          <div className="text-3xl mb-2">⬇️</div>
-                          <h3 className="text-sm font-black uppercase text-emerald-900">Pull Cloud Data</h3>
-                          <p className="text-xs text-slate-600 font-medium mt-1">Downloads the latest database state from Firebase, instantly overwriting your local view with contractor updates.</p>
-                        </div>
-                        <button onClick={handlePullFromCloud} disabled={cloudLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition disabled:opacity-50">
-                          {cloudLoading ? "Processing..." : "Pull Latest from Cloud"}
-                        </button>
-                      </div>
-
-                      <div className="bg-rose-50/50 border border-rose-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
-                        <div>
-                          <div className="text-3xl mb-2">⬆️</div>
-                          <h3 className="text-sm font-black uppercase text-rose-900">Push My Changes</h3>
-                          <p className="text-xs text-slate-600 font-medium mt-1">Uploads everything currently on your screen to Firebase. Anyone accessing the portal remotely will see your updates.</p>
-                        </div>
-                        <button onClick={handlePushToCloud} disabled={cloudLoading} className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition disabled:opacity-50">
-                          {cloudLoading ? "Processing..." : "Push Local to Cloud"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-                      <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">Active Cloud Endpoint</span>
-                      <div className="font-mono text-xs font-bold text-slate-700 bg-white p-2.5 rounded border select-all">{FIREBASE_URL}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                    <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider">Offline Disaster Recovery Tools</h3>
-                    <p className="text-xs text-slate-500 font-bold">Use these tools if you ever need to transfer your database without internet connectivity.</p>
-                    <div className="flex gap-4">
-                      <button onClick={exportBackup} className="flex-1 bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow transition">📥 Download JSON Backup</button>
-                      <label className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 rounded-xl font-black text-xs uppercase tracking-wider border border-slate-300 text-center cursor-pointer transition">
-                        Restore JSON Backup<input type="file" accept=".json" onChange={importBackup} className="hidden" />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: TEAM ROSTER */}
+              {/* TAB VIEWS */}
               {tab === "TEAM ROSTER" && (
                 <div className="space-y-6 fade-in pb-12">
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -951,7 +877,7 @@
 
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(activeTasks).map(x=>x.id))} checked={selectedIds.length===ensureArray(activeTasks).length && ensureArray(activeTasks).length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(activeTasks).map(x=>x.id))} checked={selectedIds.length===ensureArray(activeTasks).length && ensureArray(activeTasks).length>0}/></th><th colSpan="4" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
                       <tr className="bg-slate-100 text-slate-700 text-[11px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[15%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -976,7 +902,7 @@
                             <td className="p-2"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
                             <td className="p-2"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
                             <td className="p-2"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-slate-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual(col, t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         );
@@ -999,7 +925,7 @@
                   <table className="w-full text-left text-sm">
                     <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).length && ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {ensureArray(db.drawings).filter(d => d.weekNo === weekNo).map((d) => (
+                      {ensureArray(db.drawings).filter(d => d && d.weekNo === weekNo).map((d) => (
                         <tr key={d.id} className={`hover:bg-slate-50 ${selectedIds.includes(d.id)?'bg-rose-50':''}`}>
                           <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-1.5"><select value={d.l2Ref} onChange={e => handleTaskUpdates(d.id, {l2Ref: e.target.value, subFront: ""}, "drawings")} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
@@ -1092,7 +1018,7 @@
                           <td className="p-2"><select value={a.category} onChange={e => handleTaskUpdates(a.id, {category: e.target.value}, "actions")} className="w-full bg-slate-100 rounded p-2 font-bold text-xs outline-none"><option>Execution</option><option>Engineering</option><option>Procurement</option><option>Clearance</option></select></td>
                           <td className="p-2"><input type="text" value={a.desc} onChange={e => handleTaskUpdates(a.id, {desc: e.target.value}, "actions")} className="w-full bg-transparent border-b p-2 font-bold text-sm outline-none" /></td>
                           <td className="p-2"><input type="text" value={a.responsibility} onChange={e => handleTaskUpdates(a.id, {responsibility: e.target.value}, "actions")} className="w-full bg-slate-100 font-bold p-2 rounded text-xs outline-none" /></td>
-                          <td className="p-2 text-center"><input type="date" value={a.targetDate} onChange={e => handleTaskUpdates(a.id, {targetDate: e.target.value}, "actions")} className="bg-slate-100 p-2 rounded text-[10px] font-bold outline-none" /></td>
+                          <td className="p-2 text-center"><input type="date" value={a.targetDate} onChange={e => handleTaskUpdates(a.id, {targetDate: e.target.value}, "actions")} className="bg-slate-100 p-2 rounded text-xs font-bold outline-none" /></td>
                           <td className="p-2 text-center"><button onClick={() => { const next = a.status === 'Pending' ? 'In Progress' : a.status === 'In Progress' ? 'Completed' : 'Pending'; handleTaskUpdates(a.id, {status: next}, "actions"); }} className={`px-3 py-1.5 rounded text-xs font-black uppercase w-full shadow-sm ${a.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : a.status === 'In Progress' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}`}>{a.status}</button></td>
                           <td className="p-2"><textarea rows="1" value={a.ntpcRemarks} onChange={e => handleTaskUpdates(a.id, {ntpcRemarks: e.target.value}, "actions")} className="w-full bg-rose-50/30 border border-slate-200 rounded p-2 text-xs font-bold text-rose-950 outline-none" /></td>
                           <td className="p-2 text-center"><button onClick={()=>deleteIndividual("actions", a.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
@@ -1104,6 +1030,33 @@
               )}
             </main>
           </div>
+
+          {/* CLOUD COMMAND HUB MODAL */}
+          {showCloudModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
+              <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-6 border-t-8 border-ntpc-navy">
+                <div className="text-center">
+                  <h3 className="text-xl font-black uppercase text-ntpc-navy mb-1">Cloud Command Hub</h3>
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Manual Synchronization Engine</p>
+                </div>
+                
+                <div className="space-y-3">
+                  <button onClick={handlePullFromCloud} disabled={cloudLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-3 transition">
+                    <span className="text-2xl">⬇️</span> 
+                    <div className="text-left leading-tight"><span>Pull Latest Data</span><span className="block text-[9px] text-emerald-200 opacity-80">Download current cloud state</span></div>
+                  </button>
+
+                  <button onClick={handlePushToCloud} disabled={cloudLoading} className="w-full bg-rose-600 hover:bg-rose-700 text-white p-4 rounded-xl font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-3 transition">
+                    <span className="text-2xl">⬆️</span> 
+                    <div className="text-left leading-tight"><span>Push My Changes</span><span className="block text-[9px] text-rose-200 opacity-80">Upload my current screen to cloud</span></div>
+                  </button>
+                </div>
+
+                {cloudLoading && <div className="text-center text-xs font-black text-ntpc-blue uppercase animate-pulse">{cloudLoading}</div>}
+                <button onClick={() => setShowCloudModal(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-lg text-xs font-black uppercase transition">Cancel</button>
+              </div>
+            </div>
+          )}
 
           {/* OTHER MODALS */}
           {showTaskModal && (
@@ -1242,7 +1195,7 @@
                       <td className="text-center font-bold text-emerald-800">{getHitCount(elecWk)} / {elecWk.length}</td>
                       <td className="text-center font-bold">{pendingDwgs}</td>
                       <td className="text-center font-bold text-rose-700">{openActs}</td>
-                      <td className="text-center font-bold">{openHse + openQal}</td>
+                      <td className="text-center font-bold">{openHse + ensureArray(db.qualityLogs).filter(q => q && q.weekNo === weekNo && q.status === "Open").length}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1304,7 +1257,7 @@
             <table>
               <thead><tr><th className="w-[20%]">Dept & Category</th><th className="w-[50%]">Observation Detail</th><th className="text-center w-[15%]">Status</th>{printIncludePhotos && <th className="text-center w-[15%]">Evidence</th>}</tr></thead>
               <tbody>
-                {[...(db.safetyLogs || []), ...(db.qualityLogs || [])].filter(s => s && s.weekNo === weekNo).map((s, i) => (
+                {[...ensureArray(db.safetyLogs), ...ensureArray(db.qualityLogs)].filter(s => s && s.weekNo === weekNo).map((s, i) => (
                   <tr key={i}>
                     <td><strong>{s.dept || "Site"}</strong><br/>{s.category}</td>
                     <td>{s.desc}</td>
