@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nabinagar STPP Stage-II — Live WRM Portal</title>
+  <title>Nabinagar STPP Stage-II — Enterprise WRM Portal</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -26,7 +26,6 @@
     .sticky-th { position: sticky; top: 0; z-index: 20; }
     .sticky-th-sub { position: sticky; top: 38px; z-index: 19; }
 
-    /* PROFESSIONAL A4 PORTRAIT PRINT CSS */
     @media print {
       body { background: white !important; font-family: 'Arial', sans-serif; -webkit-print-color-adjust: exact; overflow: visible; font-size: 11px; }
       .no-print { display: none !important; }
@@ -56,9 +55,8 @@
     const { useState, useEffect, useMemo, useRef, Component } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-    const STORAGE_KEY = "ntpc_wrm_projector_v18_stable";
+    const STORAGE_KEY = "ntpc_wrm_projector_v19_stable";
 
-    // GLOBAL ERROR BOUNDARY
     class ErrorBoundary extends Component {
       constructor(props) { super(props); this.state = { hasError: false, error: null }; }
       static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -69,9 +67,10 @@
             <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white p-8">
               <div className="w-16 h-16 bg-rose-600 rounded-xl flex items-center justify-center text-3xl mb-4">⚠️</div>
               <h1 className="text-2xl font-black uppercase mb-2">Safe Recovery Mode</h1>
-              <p className="text-slate-400 mb-6 text-center max-w-lg">A data anomaly occurred. Your database is safe. Clear the cache below to instantly resolve this.</p>
+              <p className="text-slate-400 mb-6 text-center max-w-lg">A structural render error occurred. Your database is safe. Clear the cache below to instantly resolve this.</p>
               <div className="flex gap-4">
-                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-rose-600 px-6 py-3 rounded-lg font-bold">Clear Cache & Reload</button>
+                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-rose-600 hover:bg-rose-500 transition px-6 py-3 rounded-lg font-bold">Clear Local Cache & Reload</button>
+                <button onClick={() => window.location.reload()} className="bg-ntpc-blue hover:bg-blue-500 transition px-6 py-3 rounded-lg font-bold">↻ Standard Reload</button>
               </div>
             </div>
           );
@@ -94,15 +93,20 @@
 
     const compressImage = (file) => {
       return new Promise((resolve) => {
-        const reader = new FileReader(); reader.onerror = () => resolve("");
+        const reader = new FileReader();
+        reader.onerror = () => resolve("");
         reader.onload = (event) => {
-          const img = new Image(); img.onerror = () => resolve("");
+          const img = new Image();
+          img.onerror = () => resolve("");
           img.onload = () => {
             try {
               const canvas = document.createElement('canvas');
-              const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
-              canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
-              const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const MAX_WIDTH = 800;
+              const scaleSize = MAX_WIDTH / img.width;
+              canvas.width = MAX_WIDTH;
+              canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
               resolve(canvas.toDataURL('image/jpeg', 0.6));
             } catch(e) { resolve(""); }
           };
@@ -131,7 +135,13 @@
       else if (effS && !actS && today > effS) { delayType = "Start Overdue"; targetDisplay = effStartStr; } 
       else if (effS && actS && actS > effS) { delayType = "Start Delayed"; targetDisplay = effStartStr; actualDisplay = l.actStart; }
 
-      return { isNotStarted: !actS, isStartedLate: Boolean(effS && actS && actS > effS), isStartOverdue: Boolean(effS && !actS && today > effS), isFinishOverdue: Boolean(effE && !actE && today > effE), delayType, targetDisplay, actualDisplay };
+      return { 
+        isNotStarted: !actS, 
+        isStartedLate: Boolean(effS && actS && actS > effS), 
+        isStartOverdue: Boolean(effS && !actS && today > effS), 
+        isFinishOverdue: Boolean(effE && !actE && today > effE), 
+        delayType, targetDisplay, actualDisplay 
+      };
     };
 
     const DelayTracker = ({ title, tasks = [], discipline, l2Schedule = [] }) => {
@@ -179,15 +189,16 @@
     };
 
     const DEFAULT_DB = {
-      currentWeek: 35, weeks: [35],
+      currentWeek: 35, 
+      weeks: [35],
       standardTasks: ["Excavation", "PCC", "RCC", "Backfilling", "Rebar/Steel", "Shuttering", "Brickwork", "Plastering", "Structural Steel Erection", "Wagon Tippler Installation", "Transfer Point Erection"],
       weekMeta: { "35": { manpower: 450, trained: 380, ntpcAttendees: [], tplAttendees: [], distributionList: "hop@ntpc.co.in, pm@tpl.com" } },
       teamMaster: [], l2Schedule: [], masterBOQ: [], civilExecution: [], mechExecution: [], elecExecution: [], drawings: [], safetyLogs: [], qualityLogs: [], actions: []
     };
 
-    // STRICT SANITIZER (Prevents Firebase Objects from Crashing the Map)
     const ensureArray = (arr) => {
       if (Array.isArray(arr)) return arr.filter(Boolean);
+      if (typeof arr === 'object' && arr !== null) return Object.values(arr).filter(Boolean);
       return [];
     };
 
@@ -235,7 +246,6 @@
     };
 
     function MainPortal() {
-      // 100% LOCAL BOOT (Never fetches automatically to prevent crashes)
       const [db, setDbState] = useState(() => { 
         try { 
           const local = localStorage.getItem(STORAGE_KEY); 
@@ -251,12 +261,11 @@
         setDbState(prev => { 
           const nextState = sanitizeDB(typeof updater === 'function' ? updater(prev) : updater); 
           setHistory(h => [...h.slice(-14), prev]); 
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState)); // Local save only
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState)); 
           return nextState; 
         });
       };
 
-      // MANUAL CLOUD PUSH
       const handlePushToCloud = () => {
         setCloudLoading("Uploading to Server...");
         fetch(FIREBASE_URL, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(db) })
@@ -265,7 +274,6 @@
           .finally(() => setCloudLoading(false));
       };
 
-      // MANUAL CLOUD PULL
       const handlePullFromCloud = () => {
         setCloudLoading("Downloading from Server...");
         fetch(FIREBASE_URL)
@@ -278,10 +286,10 @@
               alert("Success! Latest data pulled from cloud.");
               setShowCloudModal(false);
             } else { 
-              alert("Cloud database is completely empty.");
+              alert("Cloud database is empty.");
             }
           })
-          .catch(err => alert("Download Failed: Cloud DB might be misconfigured."))
+          .catch(err => alert("Download Failed: Cloud DB error."))
           .finally(() => setCloudLoading(false));
       };
 
@@ -495,6 +503,11 @@
         }).sort((a,b) => b.scope - a.scope);
       }, [computedBOQ]);
 
+      // --- MISSING VARIABLE DECLARATIONS RESTORED HERE ---
+      const civilWk = ensureArray(db.civilExecution).filter(t => t && t.weekNo === weekNo);
+      const mechWk = ensureArray(db.mechExecution).filter(t => t && t.weekNo === weekNo);
+      const elecWk = ensureArray(db.elecExecution).filter(t => t && t.weekNo === weekNo);
+      
       const getHitCount = (arr) => ensureArray(arr).filter(t => parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
       const pendingDwgs = ensureArray(db.drawings).filter(d => d.weekNo === weekNo && !String(d.status).includes("Approved")).length;
       const openActs = ensureArray(db.actions).filter(a => a.weekNo === weekNo && a.status !== "Completed").length;
@@ -679,7 +692,24 @@
                     </div>
                   </div>
 
-                  {/* KPI Row 2: Deep Schedule Analytics */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-blue-600 uppercase tracking-wider">Civil Targets Met</div><div className="text-2xl font-black text-slate-800">{civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%</div></div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-blue-600 h-full transition-all" style={{width: `${civilWk.length>0 ? Math.round((getHitCount(civilWk)/civilWk.length)*100) : 0}%`}}></div></div>
+                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(civilWk)} out of {civilWk.length} hit</div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-amber-500 uppercase tracking-wider">Mech Targets Met</div><div className="text-2xl font-black text-slate-800">{mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%</div></div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-amber-500 h-full transition-all" style={{width: `${mechWk.length>0 ? Math.round((getHitCount(mechWk)/mechWk.length)*100) : 0}%`}}></div></div>
+                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(mechWk)} out of {mechWk.length} hit</div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                      <div className="flex justify-between items-center mb-2"><div className="text-xs font-black text-emerald-500 uppercase tracking-wider">Elec Targets Met</div><div className="text-2xl font-black text-slate-800">{elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%</div></div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full transition-all" style={{width: `${elecWk.length>0 ? Math.round((getHitCount(elecWk)/elecWk.length)*100) : 0}%`}}></div></div>
+                      <div className="text-xs font-bold text-slate-400 mt-2">{getHitCount(elecWk)} out of {elecWk.length} hit</div>
+                    </div>
+                  </div>
+                  
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Yet To Be Started</span><div className="text-3xl font-black text-slate-700 mt-1">{l2Metrics.notStarted}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Started Late</span><div className="text-3xl font-black text-amber-500 mt-1">{l2Metrics.startedLate}</div></div>
@@ -688,7 +718,6 @@
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Open Bottlenecks</span><div className="text-3xl font-black text-rose-600 mt-1">{openActs}</div></div>
                   </div>
 
-                  {/* COMMODITY BAR CHART */}
                   {commoditySummary.length > 0 && (
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                       <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Site-Wide Master Commodity Progress</h3>
@@ -709,13 +738,12 @@
                     </div>
                   )}
 
-                  {/* L2 DIAGNOSTICS */}
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Contract L2 Schedule Variance Diagnostics</h3>
                     <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated cross-checking against Indian Standard Time (IST) & Revised Baselines</p>
-                    <DelayTracker title="Civil Works" tasks={ensureArray(db.civilExecution).filter(t => t.weekNo === weekNo)} discipline="Civil" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Mechanical Works" tasks={ensureArray(db.mechExecution).filter(t => t.weekNo === weekNo)} discipline="Mechanical" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Electrical Works" tasks={ensureArray(db.elecExecution).filter(t => t.weekNo === weekNo)} discipline="Electrical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Civil Works" tasks={civilWk} discipline="Civil" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Mechanical Works" tasks={mechWk} discipline="Mechanical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Electrical Works" tasks={elecWk} discipline="Electrical" l2Schedule={db.l2Schedule} />
                   </div>
                 </div>
               )}
@@ -839,7 +867,7 @@
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(activeTasks).map(x=>x.id))} checked={selectedIds.length===ensureArray(activeTasks).length && ensureArray(activeTasks).length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
-                      <tr className="bg-slate-100 text-slate-700 text-[11px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
+                      <tr className="bg-slate-100 text-slate-700 text-[11px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[15%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {ensureArray(activeTasks).map((t) => {
@@ -849,21 +877,21 @@
                         return (
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
                             <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
-                            <td className="p-1.5"><select value={t.l2Ref} onChange={e => handleTaskUpdates(t.id, {l2Ref: e.target.value, subFront: ""}, col)} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
-                            <td className="p-1.5">
+                            <td className="p-2"><select value={t.l2Ref} onChange={e => handleTaskUpdates(t.id, {l2Ref: e.target.value, subFront: ""}, col)} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
+                            <td className="p-2">
                               <input type="text" list={"branch-" + t.id} value={t.subFront} onChange={e => handleTaskUpdates(t.id, {subFront: e.target.value}, col)} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
-                              <datalist id={"branch-" + t.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.desc === t.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
+                              <datalist id={"branch-" + t.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l && l.desc === t.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                             </td>
-                            <td className="p-1.5"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskUpdates(t.id, {taskName: e.target.value}, col)} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none focus:border-ntpc-orange" /></td>
-                            <td className="p-1.5 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskUpdates(t.id, {unit: e.target.value}, col)} className="w-8 bg-slate-100 text-center rounded p-1.5 text-[9px] font-bold outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.plan} onChange={e => handleTaskUpdates(t.id, {plan: e.target.value}, col)} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-ntpc-blue rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.act} onChange={e => handleTaskUpdates(t.id, {act: e.target.value}, col)} className="w-full bg-emerald-50 border border-emerald-200 text-center font-bold text-emerald-800 rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className={`p-1.5 text-center font-black text-[10px] rounded ${varColor}`}>{variance > 0 ? `+${variance}` : variance}</td>
-                            <td className="p-1.5 border-r"><input type="number" value={t.cumBacklog} onChange={e => handleTaskUpdates(t.id, {cumBacklog: e.target.value}, col)} className="w-full bg-rose-50 border border-rose-200 text-center font-black text-rose-700 rounded p-1.5 text-[10px] outline-none" /></td>
-                            <td className="p-1.5"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-slate-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
+                            <td className="p-2"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskUpdates(t.id, {taskName: e.target.value}, col)} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none focus:border-ntpc-orange" /></td>
+                            <td className="p-2 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskUpdates(t.id, {unit: e.target.value}, col)} className="w-8 bg-slate-100 text-center rounded p-1.5 text-[9px] font-bold outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.plan} onChange={e => handleTaskUpdates(t.id, {plan: e.target.value}, col)} className="w-full bg-blue-50 border border-blue-200 text-center font-bold text-ntpc-blue rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.act} onChange={e => handleTaskUpdates(t.id, {act: e.target.value}, col)} className="w-full bg-emerald-50 border border-emerald-200 text-center font-bold text-emerald-800 rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className={`p-2 text-center font-black text-[10px] rounded ${varColor}`}>{variance > 0 ? `+${variance}` : variance}</td>
+                            <td className="p-2 border-r"><input type="number" value={t.cumBacklog} onChange={e => handleTaskUpdates(t.id, {cumBacklog: e.target.value}, col)} className="w-full bg-rose-50 border border-rose-200 text-center font-black text-rose-700 rounded p-1.5 text-[10px] outline-none" /></td>
+                            <td className="p-2"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
+                            <td className="p-2"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
+                            <td className="p-2"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual(col, t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         );
@@ -884,15 +912,15 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).length && ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).length && ensureArray(db.drawings).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {ensureArray(db.drawings).filter(d => d.weekNo === weekNo).map((d) => (
+                      {ensureArray(db.drawings).filter(d => d && d.weekNo === weekNo).map((d) => (
                         <tr key={d.id} className={`hover:bg-slate-50 ${selectedIds.includes(d.id)?'bg-rose-50':''}`}>
                           <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-1.5"><select value={d.l2Ref} onChange={e => handleTaskUpdates(d.id, {l2Ref: e.target.value, subFront: ""}, "drawings")} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                           <td className="p-1.5 border-r">
                             <input type="text" list={"dwg-branch-" + d.id} value={d.subFront} onChange={e => handleTaskUpdates(d.id, {subFront: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
-                            <datalist id={"dwg-branch-" + d.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.desc === d.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
+                            <datalist id={"dwg-branch-" + d.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l && l.desc === d.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                           </td>
                           <td className="p-1.5"><input type="text" value={d.drawingNo} onChange={e => handleTaskUpdates(d.id, {drawingNo: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded font-bold text-[10px] outline-none" /></td>
                           <td className="p-1.5"><input type="text" value={d.desc} onChange={e => handleTaskUpdates(d.id, {desc: e.target.value}, "drawings")} className="w-full bg-transparent border-b p-1.5 font-bold text-sm outline-none" /></td>
@@ -920,9 +948,9 @@
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-orange-600 uppercase tracking-wider">Safety Violations Log</h3></div>
                       <table className="w-full text-left text-sm">
-                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).length && ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
+                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.safetyLogs).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.safetyLogs).filter(x=>x && x.weekNo===weekNo).length && ensureArray(db.safetyLogs).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
-                          {ensureArray(db.safetyLogs).filter(s => s.weekNo === weekNo).map(s => (
+                          {ensureArray(db.safetyLogs).filter(s => s && s.weekNo === weekNo).map(s => (
                             <tr key={s.id} className={`hover:bg-slate-50 ${selectedIds.includes(s.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2 font-bold text-xs">{s.dept || "Site"}</td>
@@ -940,9 +968,9 @@
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-blue-600 uppercase tracking-wider">Quality (FQA) NCRs</h3></div>
                       <table className="w-full text-left text-sm">
-                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).length && ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
+                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.qualityLogs).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.qualityLogs).filter(x=>x && x.weekNo===weekNo).length && ensureArray(db.qualityLogs).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
-                          {ensureArray(db.qualityLogs).filter(q => q.weekNo === weekNo).map(q => (
+                          {ensureArray(db.qualityLogs).filter(q => q && q.weekNo === weekNo).map(q => (
                             <tr key={q.id} className={`hover:bg-slate-50 ${selectedIds.includes(q.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => toggleSelect(q.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2 font-bold text-xs">{q.dept || "Site"}</td>
@@ -971,9 +999,9 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.actions).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.actions).filter(x=>x.weekNo===weekNo).length && ensureArray(db.actions).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">Category</th><th className="p-3 w-[26%]">Action Item Description</th><th className="p-3 w-[10%]">Resp</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[10%]">Status</th><th className="p-3 w-[24%]">NTPC Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.actions).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.actions).filter(x=>x && x.weekNo===weekNo).length && ensureArray(db.actions).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">Category</th><th className="p-3 w-[26%]">Action Item Description</th><th className="p-3 w-[10%]">Resp</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[10%]">Status</th><th className="p-3 w-[24%]">NTPC Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {ensureArray(db.actions).filter(a => a.weekNo === weekNo).map(a => (
+                      {ensureArray(db.actions).filter(a => a && a.weekNo === weekNo).map(a => (
                         <tr key={a.id} className={`hover:bg-slate-50 ${selectedIds.includes(a.id)?'bg-rose-50':''}`}>
                           <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(a.id)} onChange={() => toggleSelect(a.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-2"><select value={a.category} onChange={e => handleTaskUpdates(a.id, {category: e.target.value}, "actions")} className="w-full bg-slate-100 rounded p-2 font-bold text-xs outline-none"><option>Execution</option><option>Engineering</option><option>Procurement</option><option>Clearance</option></select></td>
@@ -1121,7 +1149,12 @@
           {/* PROFESSIONAL A4 PORTRAIT MOM PRINT TEMPLATE */}
           {/* ========================================================= */}
           <div id="printable-mom" className="hidden print:block font-sans bg-white text-black">
-            <div className="print-header-box"><h1 className="print-title">Nabinagar Super Thermal Power Project</h1><div className="header-gradient-line"></div></div>
+            
+            <div className="print-header-box">
+              <h1 className="print-title">Nabinagar Super Thermal Power Project</h1>
+              <div className="header-gradient-line"></div>
+            </div>
+
             <div className="flex justify-between items-end mb-4 border-b border-black pb-2">
               <h2 className="text-[14px] font-black uppercase tracking-wider">Minutes of Weekly Review Meeting (WRM) — Week #{weekNo}</h2>
               <div className="text-[10px] font-bold text-right uppercase">REF: NTPC/NSTPP-II/WRM/WK-{weekNo}<br />Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
@@ -1151,7 +1184,7 @@
                       <td className="text-center font-bold text-emerald-800">{getHitCount(elecWk)} / {elecWk.length}</td>
                       <td className="text-center font-bold">{pendingDwgs}</td>
                       <td className="text-center font-bold text-rose-700">{openActs}</td>
-                      <td className="text-center font-bold">{openHse + ensureArray(db.qualityLogs).filter(q => q.weekNo === weekNo && q.status === "Open").length}</td>
+                      <td className="text-center font-bold">{openHse + ensureArray(db.qualityLogs).filter(q => q && q.weekNo === weekNo && q.status === "Open").length}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1199,7 +1232,7 @@
             <table>
               <thead><tr><th className="w-[30%]">Action Description</th><th className="w-[15%]">Resp</th><th className="text-center w-[15%]">Target</th><th className="text-center w-[10%]">Status</th><th className="w-[30%]">NTPC Review Directives</th></tr></thead>
               <tbody>
-                {ensureArray(db.actions).filter(a => a.weekNo === weekNo).map((a, i) => (
+                {ensureArray(db.actions).filter(a => a && a.weekNo === weekNo).map((a, i) => (
                   <tr key={i}>
                     <td><strong>{a.desc}</strong></td><td>{a.responsibility}</td>
                     <td className="text-center font-bold">{a.targetDate}</td><td className="text-center font-bold uppercase">{a.status}</td>
@@ -1213,7 +1246,7 @@
             <table>
               <thead><tr><th className="w-[20%]">Dept & Category</th><th className="w-[50%]">Observation Detail</th><th className="text-center w-[15%]">Status</th>{printIncludePhotos && <th className="text-center w-[15%]">Evidence</th>}</tr></thead>
               <tbody>
-                {[...ensureArray(db.safetyLogs), ...ensureArray(db.qualityLogs)].filter(s => s.weekNo === weekNo).map((s, i) => (
+                {[...ensureArray(db.safetyLogs), ...ensureArray(db.qualityLogs)].filter(s => s && s.weekNo === weekNo).map((s, i) => (
                   <tr key={i}>
                     <td><strong>{s.dept || "Site"}</strong><br/>{s.category}</td>
                     <td>{s.desc}</td>
