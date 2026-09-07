@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nabinagar STPP Stage-II — Enterprise WRM Portal</title>
+  <title>Nabinagar STPP Stage-II — Live WRM Portal</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -56,9 +56,9 @@
     const { useState, useEffect, useMemo, useRef, Component } = React;
 
     const FIREBASE_URL = "https://bopwrm-default-rtdb.firebaseio.com/wrm_db.json";
-    const STORAGE_KEY = "ntpc_wrm_projector_v16";
+    const STORAGE_KEY = "ntpc_wrm_projector_v18_stable";
 
-    // GLOBAL ERROR BOUNDARY - Logs precise error without crashing
+    // GLOBAL ERROR BOUNDARY
     class ErrorBoundary extends Component {
       constructor(props) { super(props); this.state = { hasError: false, error: null }; }
       static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -69,10 +69,9 @@
             <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white p-8">
               <div className="w-16 h-16 bg-rose-600 rounded-xl flex items-center justify-center text-3xl mb-4">⚠️</div>
               <h1 className="text-2xl font-black uppercase mb-2">Safe Recovery Mode</h1>
-              <p className="text-slate-400 mb-6 text-center max-w-lg">A data anomaly (likely a Firebase sparse array) was safely intercepted. Clear the cache below to instantly resolve this.</p>
+              <p className="text-slate-400 mb-6 text-center max-w-lg">A data anomaly occurred. Your database is safe. Clear the cache below to instantly resolve this.</p>
               <div className="flex gap-4">
-                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-rose-600 hover:bg-rose-500 transition px-6 py-3 rounded-lg font-bold">Clear Local Cache & Reload</button>
-                <button onClick={() => window.location.reload()} className="bg-ntpc-blue hover:bg-blue-500 transition px-6 py-3 rounded-lg font-bold">↻ Standard Reload</button>
+                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-rose-600 px-6 py-3 rounded-lg font-bold">Clear Cache & Reload</button>
               </div>
             </div>
           );
@@ -95,20 +94,15 @@
 
     const compressImage = (file) => {
       return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onerror = () => resolve("");
+        const reader = new FileReader(); reader.onerror = () => resolve("");
         reader.onload = (event) => {
-          const img = new Image();
-          img.onerror = () => resolve("");
+          const img = new Image(); img.onerror = () => resolve("");
           img.onload = () => {
             try {
               const canvas = document.createElement('canvas');
-              const MAX_WIDTH = 800;
-              const scaleSize = MAX_WIDTH / img.width;
-              canvas.width = MAX_WIDTH;
-              canvas.height = img.height * scaleSize;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
+              canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
               resolve(canvas.toDataURL('image/jpeg', 0.6));
             } catch(e) { resolve(""); }
           };
@@ -137,13 +131,7 @@
       else if (effS && !actS && today > effS) { delayType = "Start Overdue"; targetDisplay = effStartStr; } 
       else if (effS && actS && actS > effS) { delayType = "Start Delayed"; targetDisplay = effStartStr; actualDisplay = l.actStart; }
 
-      return { 
-        isNotStarted: !actS, 
-        isStartedLate: Boolean(effS && actS && actS > effS), 
-        isStartOverdue: Boolean(effS && !actS && today > effS), 
-        isFinishOverdue: Boolean(effE && !actE && today > effE), 
-        delayType, targetDisplay, actualDisplay 
-      };
+      return { isNotStarted: !actS, isStartedLate: Boolean(effS && actS && actS > effS), isStartOverdue: Boolean(effS && !actS && today > effS), isFinishOverdue: Boolean(effE && !actE && today > effE), delayType, targetDisplay, actualDisplay };
     };
 
     const DelayTracker = ({ title, tasks = [], discipline, l2Schedule = [] }) => {
@@ -191,88 +179,110 @@
     };
 
     const DEFAULT_DB = {
-      currentWeek: 35, 
-      weeks: [35],
+      currentWeek: 35, weeks: [35],
       standardTasks: ["Excavation", "PCC", "RCC", "Backfilling", "Rebar/Steel", "Shuttering", "Brickwork", "Plastering", "Structural Steel Erection", "Wagon Tippler Installation", "Transfer Point Erection"],
       weekMeta: { "35": { manpower: 450, trained: 380, ntpcAttendees: [], tplAttendees: [], distributionList: "hop@ntpc.co.in, pm@tpl.com" } },
       teamMaster: [], l2Schedule: [], masterBOQ: [], civilExecution: [], mechExecution: [], elecExecution: [], drawings: [], safetyLogs: [], qualityLogs: [], actions: []
     };
 
-    // STRICT FIREBASE SANITIZER (Kills Phantom Nulls)
-    const sanitizeArray = (arr, fixFn) => {
-      if (!Array.isArray(arr)) return [];
-      return arr.filter(Boolean).map(item => fixFn ? fixFn(item) : item);
+    // STRICT SANITIZER (Prevents Firebase Objects from Crashing the Map)
+    const ensureArray = (arr) => {
+      if (Array.isArray(arr)) return arr.filter(Boolean);
+      return [];
     };
 
     const sanitizeDB = (data) => {
       if (!data || typeof data !== 'object') return DEFAULT_DB;
+      
       const fixTask = t => ({ ...t, subFront: t.subFront || "", taskName: t.taskName || "" });
       const fixL2 = l => ({ ...l, subFront: l.subFront || "", revStart: l.revStart || "", revEnd: l.revEnd || "", desc: l.desc || "" });
       
-      const weeks = Array.isArray(data.weeks) && data.weeks.length ? data.weeks : [35];
-      const curWk = data.currentWeek || weeks[0] || 35;
-      const weekMeta = data.weekMeta && typeof data.weekMeta === 'object' ? data.weekMeta : {};
-      if (!weekMeta[curWk]) weekMeta[curWk] = { manpower: 450, trained: 380, ntpcAttendees: [], tplAttendees: [], distributionList: "" };
+      const rawWeeks = ensureArray(data.weeks);
+      const weeks = rawWeeks.length > 0 ? rawWeeks : [35];
+      const curWk = data.currentWeek || weeks[0];
+      
+      const safeMeta = {};
+      if (data.weekMeta && typeof data.weekMeta === 'object') {
+        Object.keys(data.weekMeta).forEach(wk => {
+          const m = data.weekMeta[wk];
+          safeMeta[wk] = {
+            manpower: parseInt(m.manpower) || 0,
+            trained: parseInt(m.trained) || 0,
+            distributionList: m.distributionList || "",
+            ntpcAttendees: ensureArray(m.ntpcAttendees),
+            tplAttendees: ensureArray(m.tplAttendees)
+          };
+        });
+      }
+      if (!safeMeta[curWk]) safeMeta[curWk] = { manpower: 0, trained: 0, ntpcAttendees: [], tplAttendees: [], distributionList: "" };
 
       return {
         currentWeek: curWk, 
         weeks: weeks, 
-        standardTasks: sanitizeArray(data.standardTasks),
-        weekMeta: weekMeta,
-        teamMaster: sanitizeArray(data.teamMaster), 
-        l2Schedule: sanitizeArray(data.l2Schedule, fixL2),
-        masterBOQ: sanitizeArray(data.masterBOQ, fixTask),
-        civilExecution: sanitizeArray(data.civilExecution, fixTask), 
-        mechExecution: sanitizeArray(data.mechExecution, fixTask), 
-        elecExecution: sanitizeArray(data.elecExecution, fixTask),
-        drawings: sanitizeArray(data.drawings, fixTask), 
-        safetyLogs: sanitizeArray(data.safetyLogs), 
-        qualityLogs: sanitizeArray(data.qualityLogs), 
-        actions: sanitizeArray(data.actions)
+        standardTasks: ensureArray(data.standardTasks).length > 0 ? ensureArray(data.standardTasks) : DEFAULT_DB.standardTasks,
+        weekMeta: safeMeta,
+        teamMaster: ensureArray(data.teamMaster), 
+        l2Schedule: ensureArray(data.l2Schedule).map(fixL2),
+        masterBOQ: ensureArray(data.masterBOQ).map(fixTask),
+        civilExecution: ensureArray(data.civilExecution).map(fixTask), 
+        mechExecution: ensureArray(data.mechExecution).map(fixTask), 
+        elecExecution: ensureArray(data.elecExecution).map(fixTask),
+        drawings: ensureArray(data.drawings).map(fixTask), 
+        safetyLogs: ensureArray(data.safetyLogs), 
+        qualityLogs: ensureArray(data.qualityLogs), 
+        actions: ensureArray(data.actions)
       };
     };
 
     function MainPortal() {
+      // 100% LOCAL BOOT (Never fetches automatically to prevent crashes)
       const [db, setDbState] = useState(() => { 
         try { 
           const local = localStorage.getItem(STORAGE_KEY); 
           return local ? sanitizeDB(JSON.parse(local)) : DEFAULT_DB; 
         } catch(e) { return DEFAULT_DB; }
       });
-      const [cloudStatus, setCloudStatus] = useState("Connecting...");
+      
       const [history, setHistory] = useState([]);
-
-      useEffect(() => {
-        setCloudStatus("Fetching Cloud...");
-        fetch(FIREBASE_URL)
-          .then(res => res.json())
-          .then(data => {
-            if (data && typeof data === 'object' && Array.isArray(data.weeks)) { 
-              setDbState(sanitizeDB(data)); 
-              setCloudStatus("Cloud Synced (<80ms)"); 
-            } else { 
-              saveToCloud(DEFAULT_DB); 
-            }
-          })
-          .catch(() => setCloudStatus("Offline (Local Mode)"));
-      }, []);
-
-      const saveToCloud = (dataToSave) => {
-        const sanitized = sanitizeDB(dataToSave);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized)); 
-        setCloudStatus("Saving...");
-        fetch(FIREBASE_URL, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sanitized) })
-          .then(() => setCloudStatus("Cloud Synced (<80ms)"))
-          .catch(() => setCloudStatus("Offline (Saved Locally)"));
-      };
+      const [showCloudModal, setShowCloudModal] = useState(false);
+      const [cloudLoading, setCloudLoading] = useState(false);
 
       const setDb = (updater) => {
         setDbState(prev => { 
           const nextState = sanitizeDB(typeof updater === 'function' ? updater(prev) : updater); 
           setHistory(h => [...h.slice(-14), prev]); 
-          saveToCloud(nextState); 
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState)); // Local save only
           return nextState; 
         });
+      };
+
+      // MANUAL CLOUD PUSH
+      const handlePushToCloud = () => {
+        setCloudLoading("Uploading to Server...");
+        fetch(FIREBASE_URL, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(db) })
+          .then(() => { alert("Success! Database pushed to cloud."); setShowCloudModal(false); })
+          .catch(err => alert("Upload Failed: Check internet connection."))
+          .finally(() => setCloudLoading(false));
+      };
+
+      // MANUAL CLOUD PULL
+      const handlePullFromCloud = () => {
+        setCloudLoading("Downloading from Server...");
+        fetch(FIREBASE_URL)
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data === 'object') { 
+              const cleanData = sanitizeDB(data);
+              setDbState(cleanData);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData));
+              alert("Success! Latest data pulled from cloud.");
+              setShowCloudModal(false);
+            } else { 
+              alert("Cloud database is completely empty.");
+            }
+          })
+          .catch(err => alert("Download Failed: Cloud DB might be misconfigured."))
+          .finally(() => setCloudLoading(false));
       };
 
       const handleUndo = () => { 
@@ -280,7 +290,7 @@
           const previous = history[history.length - 1]; 
           setDbState(previous); 
           setHistory(h => h.slice(0, -1)); 
-          saveToCloud(previous); 
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(previous)); 
         } else { alert("No more actions to undo."); }
       };
 
@@ -288,7 +298,7 @@
         if(!confirm("WARNING: This will delete ALL rows added within the last 2 hours. Proceed?")) return;
         const threshold = Date.now() - (2 * 60 * 60 * 1000); 
         setDb(prev => {
-          const roll = (arr) => (arr||[]).filter(item => !item.createdAt || item.createdAt <= threshold);
+          const roll = (arr) => ensureArray(arr).filter(item => !item.createdAt || item.createdAt <= threshold);
           return { 
             ...prev, 
             teamMaster: roll(prev.teamMaster), l2Schedule: roll(prev.l2Schedule), masterBOQ: roll(prev.masterBOQ), 
@@ -321,18 +331,18 @@
       useEffect(() => { setSelectedIds([]); }, [tab, activeDiscipline]);
 
       const currentMeta = (db.weekMeta && db.weekMeta[weekNo]) ? db.weekMeta[weekNo] : { manpower: 0, trained: 0, ntpcAttendees: [], tplAttendees: [], distributionList: "" };
-      const activeTasks = ((activeDiscipline === "Civil" ? db.civilExecution : activeDiscipline === "Mechanical" ? db.mechExecution : db.elecExecution) || []).filter(t => t && t.weekNo === weekNo);
+      const activeTasks = ensureArray(activeDiscipline === "Civil" ? db.civilExecution : activeDiscipline === "Mechanical" ? db.mechExecution : db.elecExecution).filter(t => t.weekNo === weekNo);
       
       const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
       const toggleSelectAll = (ids) => setSelectedIds(prev => prev.length === ids.length ? [] : ids);
       const deleteSelected = (collectionName) => { 
         if(!confirm(`Delete ${selectedIds.length} items?`)) return; 
-        setDb(prev => ({ ...prev, [collectionName]: (prev[collectionName] || []).filter(item => !selectedIds.includes(item.id)) })); 
+        setDb(prev => ({ ...prev, [collectionName]: ensureArray(prev[collectionName]).filter(item => !selectedIds.includes(item.id)) })); 
         setSelectedIds([]); 
       };
       const deleteIndividual = (collectionName, id) => { 
         if(!confirm("Delete this row?")) return; 
-        setDb(prev => ({ ...prev, [collectionName]: (prev[collectionName] || []).filter(item => item.id !== id) })); 
+        setDb(prev => ({ ...prev, [collectionName]: ensureArray(prev[collectionName]).filter(item => item.id !== id) })); 
       };
 
       const exportBackup = () => {
@@ -366,7 +376,7 @@
 
       const exportToExcel = () => {
         const wb = XLSX.utils.book_new();
-        const formatExec = (arr) => (arr || []).filter(t => t && t.weekNo === weekNo).map(t => ({ "L2 Ref": t.l2Ref || "", "Branch": t.subFront || "", "Task": t.taskName || "", "Unit": t.unit || "", "Plan": t.plan || 0, "Actual": t.act || 0, "Variance": (t.act || 0) - (t.plan || 0), "Cum. Backlog": t.cumBacklog || 0, "Next Plan": t.next || 0, "Hindrance": t.hindrance || "", "TPL Remarks": t.tplRemarks || "", "NTPC Directives": t.ntpcDirectives || "" }));
+        const formatExec = (arr) => ensureArray(arr).filter(t => t && t.weekNo === weekNo).map(t => ({ "L2 Ref": t.l2Ref || "", "Branch": t.subFront || "", "Task": t.taskName || "", "Unit": t.unit || "", "Plan": t.plan || 0, "Actual": t.act || 0, "Variance": (t.act || 0) - (t.plan || 0), "Cum. Backlog": t.cumBacklog || 0, "Next Plan": t.next || 0, "Hindrance": t.hindrance || "", "TPL Remarks": t.tplRemarks || "", "NTPC Directives": t.ntpcDirectives || "" }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.civilExecution)), "Civil Works");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.mechExecution)), "Mechanical Works");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExec(db.elecExecution)), "Electrical Works");
@@ -374,8 +384,8 @@
         const boqData = computedBOQ.map(b => ({ "Discipline": b.discipline, "L2 Ref": b.l2Ref, "Branch": b.subFront, "Task": b.taskName, "Unit": b.uom, "Total Scope": b.totalScope, "Historical Actual": b.historicalActual, "App Weeks Actual": b.appActuals, "Total Cumulative": b.totalCum, "Balance": b.balance, "% Complete": b.pct + "%" }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(boqData), "Master BOQ Progress");
 
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((db.drawings || []).filter(d => d && d.weekNo === weekNo).map(d => ({ "L2 Ref": d.l2Ref || "", "Branch": d.subFront || "", "Discipline": d.discipline || "", "Drawing No": d.drawingNo || "", "Desc": d.desc || "", "Priority": d.priority || "", "Target": d.targetDate || "", "Status": d.status || "", "Impact": d.frontImpact || "" }))), "Drawings DCI");
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((db.actions || []).filter(a => a && a.weekNo === weekNo).map(a => ({ "Category": a.category || "", "Description": a.desc || "", "Responsibility": a.responsibility || "", "Target": a.targetDate || "", "Status": a.status || "", "NTPC Remarks": a.ntpcRemarks || "" }))), "Action Tracker");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ensureArray(db.drawings).filter(d => d && d.weekNo === weekNo).map(d => ({ "L2 Ref": d.l2Ref || "", "Branch": d.subFront || "", "Discipline": d.discipline || "", "Drawing No": d.drawingNo || "", "Desc": d.desc || "", "Priority": d.priority || "", "Target": d.targetDate || "", "Status": d.status || "", "Impact": d.frontImpact || "" }))), "Drawings DCI");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ensureArray(db.actions).filter(a => a && a.weekNo === weekNo).map(a => ({ "Category": a.category || "", "Description": a.desc || "", "Responsibility": a.responsibility || "", "Target": a.targetDate || "", "Status": a.status || "", "NTPC Remarks": a.ntpcRemarks || "" }))), "Action Tracker");
         XLSX.writeFile(wb, `NTPC_WRM_Week_${weekNo}_Export.xlsx`);
       };
 
@@ -384,19 +394,19 @@
         const rows = pasteText.trim().split("\n").map(r => r.split("\t")); 
         const ts = Date.now();
         if (pasteType === "Team") { 
-          setDb(prev => ({ ...prev, teamMaster: [...rows.map((r, i) => ({ id: "TM-" + ts + i, empId: (r[0] || "").trim(), name: (r[1] || "").trim(), desig: (r[2] || "").trim(), dept: (r[3] || "").trim(), org: (r[4] || "NTPC").trim(), createdAt: ts })).filter(item => item.name), ...(prev.teamMaster || [])] })); 
+          setDb(prev => ({ ...prev, teamMaster: [...rows.map((r, i) => ({ id: "TM-" + ts + i, empId: (r[0] || "").trim(), name: (r[1] || "").trim(), desig: (r[2] || "").trim(), dept: (r[3] || "").trim(), org: (r[4] || "NTPC").trim(), createdAt: ts })).filter(item => item.name), ...ensureArray(prev.teamMaster)] })); 
         } else if (pasteType === "L2") { 
-          setDb(prev => ({ ...prev, l2Schedule: [...rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), subFront: (r[2] || "").trim(), l2Start: cleanDate(r[3]), revStart: cleanDate(r[4]), actStart: cleanDate(r[5]), l2End: cleanDate(r[6]), revEnd: cleanDate(r[7]), actEnd: cleanDate(r[8]), createdAt: ts })).filter(item => item.desc), ...(prev.l2Schedule || [])] })); 
+          setDb(prev => ({ ...prev, l2Schedule: [...rows.map((r, i) => ({ id: "L2-" + ts + i, discipline: (r[0] || "Civil").trim(), desc: (r[1] || "").trim(), subFront: (r[2] || "").trim(), l2Start: cleanDate(r[3]), revStart: cleanDate(r[4]), actStart: cleanDate(r[5]), l2End: cleanDate(r[6]), revEnd: cleanDate(r[7]), actEnd: cleanDate(r[8]), createdAt: ts })).filter(item => item.desc), ...ensureArray(prev.l2Schedule)] })); 
         } else if (pasteType === "BOQ") { 
-          setDb(prev => ({ ...prev, masterBOQ: [...rows.map((r, i) => ({ id: "BOQ-" + ts + i, discipline: (r[0] || "Civil").trim(), l2Ref: (r[1] || "").trim(), subFront: (r[2] || "").trim(), taskName: (r[3] || "").trim(), uom: (r[4] || "m³").trim(), totalScope: parseFloat(r[5])||0, historicalActual: parseFloat(r[6])||0, createdAt: ts })).filter(item => item.taskName), ...(prev.masterBOQ || [])] })); 
+          setDb(prev => ({ ...prev, masterBOQ: [...rows.map((r, i) => ({ id: "BOQ-" + ts + i, discipline: (r[0] || "Civil").trim(), l2Ref: (r[1] || "").trim(), subFront: (r[2] || "").trim(), taskName: (r[3] || "").trim(), uom: (r[4] || "m³").trim(), totalScope: parseFloat(r[5])||0, historicalActual: parseFloat(r[6])||0, createdAt: ts })).filter(item => item.taskName), ...ensureArray(prev.masterBOQ)] })); 
         } else if (pasteType === "Drawings") { 
-          setDb(prev => ({ ...prev, drawings: [...rows.map((r, i) => ({ id: "DW-" + ts + i, weekNo, l2Ref: (r[0] || "").trim(), subFront: (r[1] || "").trim(), discipline: (r[2] || "Civil").trim(), drawingNo: (r[3] || "").trim(), desc: (r[4] || "").trim(), priority: (r[5] || "Moderate").trim(), targetDate: cleanDate(r[6]), expectedDate: cleanDate(r[7]), status: (r[8] || "Pending").trim(), frontImpact: (r[9] || "").trim(), remarks: (r[10] || "").trim(), createdAt: ts })).filter(item => item.drawingNo), ...(prev.drawings || [])] })); 
+          setDb(prev => ({ ...prev, drawings: [...rows.map((r, i) => ({ id: "DW-" + ts + i, weekNo, l2Ref: (r[0] || "").trim(), subFront: (r[1] || "").trim(), discipline: (r[2] || "Civil").trim(), drawingNo: (r[3] || "").trim(), desc: (r[4] || "").trim(), priority: (r[5] || "Moderate").trim(), targetDate: cleanDate(r[6]), expectedDate: cleanDate(r[7]), status: (r[8] || "Pending").trim(), frontImpact: (r[9] || "").trim(), remarks: (r[10] || "").trim(), createdAt: ts })).filter(item => item.drawingNo), ...ensureArray(prev.drawings)] })); 
         } else if (pasteType === "Actions") { 
-          setDb(prev => ({ ...prev, actions: [...rows.map((r, i) => ({ id: "ACT-" + ts + i, weekNo, category: (r[0] || "Execution").trim(), desc: (r[1] || "").trim(), responsibility: (r[2] || "TPL").trim(), targetDate: cleanDate(r[3]), revisedDate: cleanDate(r[4]), status: (r[5] || "Pending").trim(), ntpcRemarks: (r[6] || "").trim(), createdAt: ts })).filter(item => item.desc), ...(prev.actions || [])] })); 
+          setDb(prev => ({ ...prev, actions: [...rows.map((r, i) => ({ id: "ACT-" + ts + i, weekNo, category: (r[0] || "Execution").trim(), desc: (r[1] || "").trim(), responsibility: (r[2] || "TPL").trim(), targetDate: cleanDate(r[3]), revisedDate: cleanDate(r[4]), status: (r[5] || "Pending").trim(), ntpcRemarks: (r[6] || "").trim(), createdAt: ts })).filter(item => item.desc), ...ensureArray(prev.actions)] })); 
         } else {
           const col = activeDiscipline === "Civil" ? "civilExecution" : activeDiscipline === "Mechanical" ? "mechExecution" : "elecExecution";
           const prefix = activeDiscipline === "Civil" ? "CV-" : activeDiscipline === "Mechanical" ? "MC-" : "EL-";
-          setDb(prev => ({ ...prev, [col]: [...rows.map((r, i) => ({ id: prefix + ts + i, weekNo, l2Ref: (r[0] || "").trim(), subFront: (r[1] || "").trim(), taskName: (r[2] || "").trim(), unit: (r[3] || (activeDiscipline === "Civil" ? "m³" : "MT")).trim(), plan: parseFloat(r[4]) || 0, act: parseFloat(r[5]) || 0, next: parseFloat(r[6]) || 0, cumBacklog: parseFloat(r[7]) || 0, hindrance: (r[8] || "").trim(), tplRemarks: (r[9] || "").trim(), ntpcDirectives: (r[10] || "").trim(), milestone: "In Progress", createdAt: ts })).filter(item => item.taskName), ...(prev[col] || [])] }));
+          setDb(prev => ({ ...prev, [col]: [...rows.map((r, i) => ({ id: prefix + ts + i, weekNo, l2Ref: (r[0] || "").trim(), subFront: (r[1] || "").trim(), taskName: (r[2] || "").trim(), unit: (r[3] || (activeDiscipline === "Civil" ? "m³" : "MT")).trim(), plan: parseFloat(r[4]) || 0, act: parseFloat(r[5]) || 0, next: parseFloat(r[6]) || 0, cumBacklog: parseFloat(r[7]) || 0, hindrance: (r[8] || "").trim(), tplRemarks: (r[9] || "").trim(), ntpcDirectives: (r[10] || "").trim(), milestone: "In Progress", createdAt: ts })).filter(item => item.taskName), ...ensureArray(prev[col])] }));
         }
         setPasteText(""); 
         setShowPasteModal(false);
@@ -405,7 +415,7 @@
       const handleTaskUpdates = (taskId, updates, collection) => {
         setDb(prev => ({
           ...prev, 
-          [collection]: (prev[collection] || []).map(item => {
+          [collection]: ensureArray(prev[collection]).map(item => {
             if (item.id !== taskId) return item;
             const nextItem = { ...item, ...updates };
             if ('plan' in updates || 'act' in updates) {
@@ -420,21 +430,20 @@
 
       const handleAddRow = (type) => {
         const ts = Date.now();
-        if (type === "L2") { setDb(prev => ({ ...prev, l2Schedule: [{ id: "L2-"+ts, discipline: "Civil", desc: "", subFront: "", l2Start: "", revStart: "", actStart: "", l2End: "", revEnd: "", actEnd: "", createdAt: ts }, ...(prev.l2Schedule || [])] })); } 
-        else if (type === "Team") { setDb(prev => ({ ...prev, teamMaster: [{ id: "TM-"+ts, empId: "", name: "", desig: "", dept: "", org: "NTPC", createdAt: ts }, ...(prev.teamMaster || [])] })); } 
-        else if (type === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [{ id: "BOQ-"+ts, discipline: activeDiscipline, l2Ref: "", subFront: "", taskName: "", uom: activeDiscipline==="Civil"?"m³":"MT", totalScope: 0, historicalActual: 0, createdAt: ts }, ...(prev.masterBOQ || [])] })); } 
-        else if (type === "Drawings") { setDb(prev => ({ ...prev, drawings: [{ id: "DW-"+ts, weekNo, l2Ref: "", subFront: "", discipline: "Civil", drawingNo: "", desc: "", priority: "Moderate", targetDate: "", expectedDate: "", status: "Pending", frontImpact: "", remarks: "", createdAt: ts }, ...(prev.drawings || [])] })); } 
-        else if (type === "Actions") { setDb(prev => ({ ...prev, actions: [{ id: "ACT-"+ts, weekNo, category: "Execution", desc: "", responsibility: "TPL", targetDate: "", revisedDate: "", status: "Pending", ntpcRemarks: "", createdAt: ts }, ...(prev.actions || [])] })); } 
+        if (type === "L2") { setDb(prev => ({ ...prev, l2Schedule: [{ id: "L2-"+ts, discipline: "Civil", desc: "", subFront: "", l2Start: "", revStart: "", actStart: "", l2End: "", revEnd: "", actEnd: "", createdAt: ts }, ...ensureArray(prev.l2Schedule)] })); } 
+        else if (type === "Team") { setDb(prev => ({ ...prev, teamMaster: [{ id: "TM-"+ts, empId: "", name: "", desig: "", dept: "", org: "NTPC", createdAt: ts }, ...ensureArray(prev.teamMaster)] })); } 
+        else if (type === "BOQ") { setDb(prev => ({ ...prev, masterBOQ: [{ id: "BOQ-"+ts, discipline: activeDiscipline, l2Ref: "", subFront: "", taskName: "", uom: activeDiscipline==="Civil"?"m³":"MT", totalScope: 0, historicalActual: 0, createdAt: ts }, ...ensureArray(prev.masterBOQ)] })); } 
+        else if (type === "Drawings") { setDb(prev => ({ ...prev, drawings: [{ id: "DW-"+ts, weekNo, l2Ref: "", subFront: "", discipline: "Civil", drawingNo: "", desc: "", priority: "Moderate", targetDate: "", expectedDate: "", status: "Pending", frontImpact: "", remarks: "", createdAt: ts }, ...ensureArray(prev.drawings)] })); } 
+        else if (type === "Actions") { setDb(prev => ({ ...prev, actions: [{ id: "ACT-"+ts, weekNo, category: "Execution", desc: "", responsibility: "TPL", targetDate: "", revisedDate: "", status: "Pending", ntpcRemarks: "", createdAt: ts }, ...ensureArray(prev.actions)] })); } 
         else {
           const col = type === "Civil" ? "civilExecution" : type === "Mechanical" ? "mechExecution" : "elecExecution";
           const prefix = type === "Civil" ? "CV-" : type === "Mechanical" ? "MC-" : "EL-";
-          setDb(prev => ({ ...prev, [col]: [{ id: prefix+ts, weekNo, l2Ref: "", subFront: "", taskName: "", unit: type==="Civil"?"m³":type==="Mechanical"?"MT":"m", plan: 0, act: 0, next: 0, cumBacklog: 0, prevBacklog: 0, hindrance: "", tplRemarks: "", ntpcDirectives: "", milestone: "In Progress", createdAt: ts }, ...(prev[col] || [])] }));
+          setDb(prev => ({ ...prev, [col]: [{ id: prefix+ts, weekNo, l2Ref: "", subFront: "", taskName: "", unit: type==="Civil"?"m³":type==="Mechanical"?"MT":"m", plan: 0, act: 0, next: 0, cumBacklog: 0, prevBacklog: 0, hindrance: "", tplRemarks: "", ntpcDirectives: "", milestone: "In Progress", createdAt: ts }, ...ensureArray(prev[col])] }));
         }
       };
 
       const handleSaveLog = async () => {
         if (!logForm.desc) return alert("Please enter an observation description.");
-        setCloudStatus("Compressing Photo..."); 
         const ts = Date.now(); 
         let compressedBase64 = "";
         if (logForm.file) { compressedBase64 = await compressImage(logForm.file); }
@@ -443,28 +452,27 @@
         const prefix = logForm.type === "Safety" ? "SAF-" : "QAL-";
         const newEntry = { id: prefix + ts, weekNo, dept: logForm.dept, category: logForm.category, desc: logForm.desc, status: "Open", photoUrl: compressedBase64, createdAt: ts };
         
-        setDb(prev => ({ ...prev, [collection]: [newEntry, ...(prev[collection] || [])] }));
+        setDb(prev => ({ ...prev, [collection]: [newEntry, ...ensureArray(prev[collection])] }));
         setShowLogModal(false); 
         setLogForm({ type: "Safety", category: "Unsafe Condition", dept: "Civil", desc: "", file: null });
-        setCloudStatus("Cloud Synced (<80ms)");
       };
 
       const toggleAttendee = (org, id) => {
-        const emp = (db.teamMaster || []).find(t => t && t.id === id); 
+        const emp = ensureArray(db.teamMaster).find(t => t.id === id); 
         if (!emp) return;
         setDb(prev => {
           const field = org === 'NTPC' ? 'ntpcAttendees' : 'tplAttendees';
           const currentList = (prev.weekMeta && prev.weekMeta[weekNo] && prev.weekMeta[weekNo][field]) ? prev.weekMeta[weekNo][field] : [];
-          const exists = currentList.find(a => a && a.id === id);
-          let newList = exists ? currentList.filter(a => a && a.id !== id) : [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
+          const exists = ensureArray(currentList).find(a => a.id === id);
+          let newList = exists ? currentList.filter(a => a.id !== id) : [...currentList, { id: emp.id, name: emp.name, desig: emp.desig }];
           return { ...prev, weekMeta: { ...prev.weekMeta, [weekNo]: { ...(prev.weekMeta[weekNo] || {}), [field]: newList } } };
         });
       };
 
       const computedBOQ = useMemo(() => {
-        return (db.masterBOQ || []).filter(Boolean).map(boq => {
-          const relevantExecs = boq.discipline === "Civil" ? (db.civilExecution || []) : boq.discipline === "Mechanical" ? (db.mechExecution || []) : (db.elecExecution || []);
-          const appActuals = relevantExecs.filter(ex => ex && ex.l2Ref === boq.l2Ref && (ex.subFront || "") === (boq.subFront || "") && ex.taskName === boq.taskName).reduce((sum, ex) => sum + (parseFloat(ex.act) || 0), 0);
+        return ensureArray(db.masterBOQ).map(boq => {
+          const relevantExecs = boq.discipline === "Civil" ? ensureArray(db.civilExecution) : boq.discipline === "Mechanical" ? ensureArray(db.mechExecution) : ensureArray(db.elecExecution);
+          const appActuals = relevantExecs.filter(ex => ex.l2Ref === boq.l2Ref && ex.subFront === boq.subFront && ex.taskName === boq.taskName).reduce((sum, ex) => sum + (parseFloat(ex.act) || 0), 0);
           const totalCum = (parseFloat(boq.historicalActual) || 0) + appActuals;
           const scope = parseFloat(boq.totalScope) || 0;
           const balance = Math.max(0, scope - totalCum);
@@ -475,8 +483,8 @@
 
       const commoditySummary = useMemo(() => {
         const grouped = {};
-        (computedBOQ || []).forEach(b => {
-          if (!b || !b.taskName) return;
+        ensureArray(computedBOQ).forEach(b => {
+          if (!b.taskName) return;
           if (!grouped[b.taskName]) grouped[b.taskName] = { scope: 0, actual: 0, uom: b.uom || "" };
           grouped[b.taskName].scope += (parseFloat(b.totalScope) || 0);
           grouped[b.taskName].actual += (parseFloat(b.totalCum) || 0);
@@ -487,14 +495,13 @@
         }).sort((a,b) => b.scope - a.scope);
       }, [computedBOQ]);
 
-      const getHitCount = (arr) => (arr || []).filter(t => t && parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
-      const pendingDwgs = (db.drawings || []).filter(d => d && d.weekNo === weekNo && !String(d.status).includes("Approved")).length;
-      const openActs = (db.actions || []).filter(a => a && a.weekNo === weekNo && a.status !== "Completed").length;
+      const getHitCount = (arr) => ensureArray(arr).filter(t => parseFloat(t.act) >= parseFloat(t.plan) && parseFloat(t.plan) > 0).length;
+      const pendingDwgs = ensureArray(db.drawings).filter(d => d.weekNo === weekNo && !String(d.status).includes("Approved")).length;
+      const openActs = ensureArray(db.actions).filter(a => a.weekNo === weekNo && a.status !== "Completed").length;
       
       const l2Metrics = useMemo(() => {
         let notStarted = 0, startedLate = 0, startOverdue = 0, finishOverdue = 0;
-        (db.l2Schedule || []).forEach(l => {
-          if (!l) return;
+        ensureArray(db.l2Schedule).forEach(l => {
           const s = getL2DelayStatus(l);
           if (s.isNotStarted) notStarted++;
           if (s.isStartedLate) startedLate++;
@@ -511,13 +518,13 @@
         window.location.href = `mailto:${emailList}?subject=${subject}&body=${body}`;
       };
 
-      const uniqueL2Parents = Array.from(new Set((db.l2Schedule || []).filter(l => l && l.discipline === activeDiscipline).map(l => l.desc))).filter(Boolean);
+      const uniqueL2Parents = Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.discipline === activeDiscipline).map(l => l.desc))).filter(Boolean);
 
       return (
         <div className="flex h-screen w-screen bg-slate-50 overflow-hidden font-sans text-sm">
           
           <datalist id="standard-tasks">
-            {(db.standardTasks || []).map(t => <option key={t} value={t} />)}
+            {ensureArray(db.standardTasks).map(t => <option key={t} value={t} />)}
           </datalist>
 
           <aside className="w-64 bg-ntpc-navy text-white flex flex-col h-screen shadow-2xl flex-shrink-0 z-50 no-print">
@@ -547,34 +554,32 @@
               <div className="flex items-center gap-4">
                 <span className="text-sm font-black text-ntpc-blue uppercase tracking-wider">Review Week:</span>
                 <select value={weekNo} onChange={e => setWeekNo(parseInt(e.target.value))} className="bg-slate-100 font-black text-sm px-3 py-2 rounded-lg border border-slate-300 outline-none">
-                  {(db.weeks || []).map(w => <option key={w} value={w}>Week {w}</option>)}
+                  {ensureArray(db.weeks).map(w => <option key={w} value={w}>Week {w}</option>)}
                 </select>
                 <button onClick={() => {
                   const nx = parseInt(prompt("Enter New Week Number:", weekNo + 1));
-                  if(nx && !db.weeks.includes(nx)) {
+                  if(nx && !ensureArray(db.weeks).includes(nx)) {
                     setDb(prev => {
-                      const roll = (arr) => (arr || []).filter(t => t && t.weekNo === weekNo && t.milestone !== "Completed").map(t => ({ ...t, id: String(t.id).split('-')[0]+"-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, plan: parseFloat(t.next)||0, act: 0, next: 0, cumBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), prevBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), hindrance: "", tplRemarks: "", ntpcDirectives: "", createdAt: Date.now() }));
-                      const rollD = (prev.drawings || []).filter(d => d && d.weekNo === weekNo && !String(d.status).includes("Approved")).map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
-                      const rollA = (prev.actions || []).filter(a => a && a.weekNo === weekNo && a.status !== "Completed").map(a => ({...a, id: "ACT-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
+                      const roll = (arr) => ensureArray(arr).filter(t => t.weekNo === weekNo && t.milestone !== "Completed").map(t => ({ ...t, id: String(t.id).split('-')[0]+"-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, plan: parseFloat(t.next)||0, act: 0, next: 0, cumBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), prevBacklog: Math.max(0, (parseFloat(t.cumBacklog)||0) + ((parseFloat(t.plan)||0)-(parseFloat(t.act)||0))), hindrance: "", tplRemarks: "", ntpcDirectives: "", createdAt: Date.now() }));
+                      const rollD = ensureArray(prev.drawings).filter(d => d.weekNo === weekNo && !String(d.status).includes("Approved")).map(d => ({...d, id: "DW-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
+                      const rollA = ensureArray(prev.actions).filter(a => a.weekNo === weekNo && a.status !== "Completed").map(a => ({...a, id: "ACT-"+Date.now()+Math.floor(Math.random()*100), weekNo: nx, createdAt: Date.now()}));
                       return { 
-                        ...prev, 
-                        currentWeek: nx, 
-                        weeks: [nx, ...(prev.weeks || [])], 
-                        weekMeta: { ...(prev.weekMeta || {}), [nx]: prev.weekMeta[weekNo] || {} }, 
-                        civilExecution: [...roll(prev.civilExecution), ...(prev.civilExecution || [])], 
-                        mechExecution: [...roll(prev.mechExecution), ...(prev.mechExecution || [])], 
-                        elecExecution: [...roll(prev.elecExecution), ...(prev.elecExecution || [])], 
-                        drawings: [...rollD, ...(prev.drawings || [])], 
-                        actions: [...rollA, ...(prev.actions || [])] 
+                        ...prev, currentWeek: nx, weeks: [nx, ...ensureArray(prev.weeks)], 
+                        weekMeta: { ...(prev.weekMeta || {}), [nx]: (prev.weekMeta||{})[weekNo] || {} }, 
+                        civilExecution: [...roll(prev.civilExecution), ...ensureArray(prev.civilExecution)], 
+                        mechExecution: [...roll(prev.mechExecution), ...ensureArray(prev.mechExecution)], 
+                        elecExecution: [...roll(prev.elecExecution), ...ensureArray(prev.elecExecution)], 
+                        drawings: [...rollD, ...ensureArray(prev.drawings)], 
+                        actions: [...rollA, ...ensureArray(prev.actions)] 
                       };
                     });
                     setWeekNo(nx);
                   }
                 }} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-black uppercase shadow">+ Initialize New Week</button>
-                <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full border ${cloudStatus.includes('Synced') ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-700 border-amber-300'}`}>{cloudStatus}</span>
               </div>
 
               <div className="flex items-center gap-3">
+                <button onClick={() => setShowCloudModal(true)} className="bg-ntpc-navy hover:bg-blue-900 text-white px-5 py-2 rounded-lg text-xs font-black uppercase shadow-lg border border-blue-400">☁️ Cloud Hub</button>
                 <button onClick={exportToExcel} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-emerald-100 transition flex items-center gap-2">📥 Export Excel</button>
                 <button onClick={handleEmailTeam} className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-amber-100 transition flex items-center gap-2">✉️ Email Team</button>
                 <button onClick={() => setShowPrintModal(true)} className="bg-ntpc-blue hover:bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-extrabold uppercase shadow">🖨️ Print MoM</button>
@@ -606,9 +611,9 @@
                       </div>
                     </div>
                     <table className="w-full text-left text-sm">
-                      <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll((db.teamMaster || []).map(x=>x.id))} checked={selectedIds.length===(db.teamMaster || []).length && (db.teamMaster || []).length>0}/></th><th className="p-3 w-[15%]">Emp ID</th><th className="p-3 w-[25%]">Full Name</th><th className="p-3 w-[25%]">Designation</th><th className="p-3 w-[20%]">Department</th><th className="p-3 w-[15%]">Org</th><th className="p-3 w-10"></th></tr></thead>
+                      <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.teamMaster).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.teamMaster).length && ensureArray(db.teamMaster).length>0}/></th><th className="p-3 w-[15%]">Emp ID</th><th className="p-3 w-[25%]">Full Name</th><th className="p-3 w-[25%]">Designation</th><th className="p-3 w-[20%]">Department</th><th className="p-3 w-[15%]">Org</th><th className="p-3 w-10"></th></tr></thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(db.teamMaster || []).map((t, i) => (
+                        {ensureArray(db.teamMaster).map((t, i) => (
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
                             <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
                             <td className="p-2"><input type="text" value={t.empId} onChange={e => handleTaskUpdates(t.id, {empId: e.target.value}, "teamMaster")} className="w-full bg-slate-100 p-2 rounded font-bold outline-none"/></td>
@@ -641,10 +646,10 @@
                         <span className="text-xs font-black uppercase text-blue-600 block mb-3 border-b pb-2">NTPC Leadership Team</span>
                         <select onChange={e => toggleAttendee('NTPC', e.target.value)} value="" className="w-full bg-slate-50 border p-2 rounded-lg text-xs font-bold outline-none cursor-pointer mb-3">
                           <option value="" disabled>+ Select to Add Participant...</option>
-                          {(db.teamMaster || []).filter(t => t && t.org === 'NTPC').map(t => <option key={t.id} value={t.id}>{t.name} - {t.desig}</option>)}
+                          {ensureArray(db.teamMaster).filter(t => t.org === 'NTPC').map(t => <option key={t.id} value={t.id}>{t.name} - {t.desig}</option>)}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          {(currentMeta.ntpcAttendees||[]).map(a => (
+                          {ensureArray(currentMeta.ntpcAttendees).map(a => (
                             <span key={a.id} className="bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm">
                               {a.name} ({a.desig}) <button onClick={()=>toggleAttendee('NTPC', a.id)} className="text-blue-400 hover:text-blue-600">✕</button>
                             </span>
@@ -656,10 +661,10 @@
                         <span className="text-xs font-black uppercase text-orange-600 block mb-3 border-b pb-2">M/s TPL Leadership Team</span>
                         <select onChange={e => toggleAttendee('TPL', e.target.value)} value="" className="w-full bg-slate-50 border p-2 rounded-lg text-xs font-bold outline-none cursor-pointer mb-3">
                           <option value="" disabled>+ Select to Add Participant...</option>
-                          {(db.teamMaster || []).filter(t => t && t.org === 'TPL').map(t => <option key={t.id} value={t.id}>{t.name} - {t.desig}</option>)}
+                          {ensureArray(db.teamMaster).filter(t => t.org === 'TPL').map(t => <option key={t.id} value={t.id}>{t.name} - {t.desig}</option>)}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          {(currentMeta.tplAttendees||[]).map(a => (
+                          {ensureArray(currentMeta.tplAttendees).map(a => (
                             <span key={a.id} className="bg-orange-50 text-orange-800 border border-orange-200 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm">
                               {a.name} ({a.desig}) <button onClick={()=>toggleAttendee('TPL', a.id)} className="text-orange-400 hover:text-orange-600">✕</button>
                             </span>
@@ -708,9 +713,9 @@
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-black text-ntpc-blue uppercase tracking-wider mb-2">Contract L2 Schedule Variance Diagnostics</h3>
                     <p className="text-[11px] text-slate-400 font-bold uppercase mb-4">Automated cross-checking against Indian Standard Time (IST) & Revised Baselines</p>
-                    <DelayTracker title="Civil Works" tasks={(db.civilExecution || []).filter(t => t && t.weekNo === weekNo)} discipline="Civil" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Mechanical Works" tasks={(db.mechExecution || []).filter(t => t && t.weekNo === weekNo)} discipline="Mechanical" l2Schedule={db.l2Schedule} />
-                    <DelayTracker title="Electrical Works" tasks={(db.elecExecution || []).filter(t => t && t.weekNo === weekNo)} discipline="Electrical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Civil Works" tasks={ensureArray(db.civilExecution).filter(t => t.weekNo === weekNo)} discipline="Civil" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Mechanical Works" tasks={ensureArray(db.mechExecution).filter(t => t.weekNo === weekNo)} discipline="Mechanical" l2Schedule={db.l2Schedule} />
+                    <DelayTracker title="Electrical Works" tasks={ensureArray(db.elecExecution).filter(t => t.weekNo === weekNo)} discipline="Electrical" l2Schedule={db.l2Schedule} />
                   </div>
                 </div>
               )}
@@ -737,16 +742,16 @@
 
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(computedBOQ.filter(x=>x.discipline===activeDiscipline).map(x=>x.id))} checked={selectedIds.length===computedBOQ.filter(x=>x.discipline===activeDiscipline).length && computedBOQ.filter(x=>x.discipline===activeDiscipline).length>0}/></th><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%] border-r border-slate-700">Branch/Structure</th><th className="p-3 w-[15%]">Task Name</th><th className="p-3 w-[5%] text-center border-r border-slate-700">UoM</th><th className="p-3 w-[8%] text-center bg-slate-800 text-blue-300">Total Scope</th><th className="p-3 w-[8%] text-center bg-slate-800 text-amber-300 border-r border-slate-700">Base Actuals</th><th className="p-3 w-[8%] text-center text-slate-300">App Actuals</th><th className="p-3 w-[9%] text-center text-emerald-400">Total Cum.</th><th className="p-3 w-[8%] text-center text-rose-300 border-r border-slate-700">Balance</th><th className="p-3 w-[12%]">% Progress</th><th className="p-3 w-8"></th></tr>
+                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(computedBOQ).filter(x=>x.discipline===activeDiscipline).map(x=>x.id))} checked={selectedIds.length===ensureArray(computedBOQ).filter(x=>x.discipline===activeDiscipline).length && ensureArray(computedBOQ).filter(x=>x.discipline===activeDiscipline).length>0}/></th><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%] border-r border-slate-700">Branch/Structure</th><th className="p-3 w-[15%]">Task Name</th><th className="p-3 w-[5%] text-center border-r border-slate-700">UoM</th><th className="p-3 w-[8%] text-center bg-slate-800 text-blue-300">Total Scope</th><th className="p-3 w-[8%] text-center bg-slate-800 text-amber-300 border-r border-slate-700">Base Actuals</th><th className="p-3 w-[8%] text-center text-slate-300">App Actuals</th><th className="p-3 w-[9%] text-center text-emerald-400">Total Cum.</th><th className="p-3 w-[8%] text-center text-rose-300 border-r border-slate-700">Balance</th><th className="p-3 w-[12%]">% Progress</th><th className="p-3 w-8"></th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {computedBOQ.filter(b => b.discipline === activeDiscipline).map((b) => (
+                      {ensureArray(computedBOQ).filter(b => b.discipline === activeDiscipline).map((b) => (
                         <tr key={b.id} className={`hover:bg-slate-50 ${selectedIds.includes(b.id)?'bg-rose-50':''}`}>
                           <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(b.id)} onChange={() => toggleSelect(b.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-2 border-r"><select value={b.l2Ref} onChange={e => handleTaskUpdates(b.id, {l2Ref: e.target.value, subFront: ""}, "masterBOQ")} className="w-full bg-slate-100 rounded p-2 font-bold text-[10px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                           <td className="p-2 border-r">
                             <input type="text" list={"boq-branch-" + b.id} value={b.subFront} onChange={e => handleTaskUpdates(b.id, {subFront: e.target.value}, "masterBOQ")} className="w-full bg-slate-100 p-2 rounded text-[10px] font-bold outline-none" placeholder="Branch" />
-                            <datalist id={"boq-branch-" + b.id}>{Array.from(new Set((db.l2Schedule || []).filter(l => l && l.desc === b.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
+                            <datalist id={"boq-branch-" + b.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.desc === b.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                           </td>
                           <td className="p-2"><input type="text" list="standard-tasks" value={b.taskName} onChange={e => handleTaskUpdates(b.id, {taskName: e.target.value}, "masterBOQ")} className="w-full bg-transparent border-b p-2 font-bold text-xs outline-none focus:border-ntpc-orange" /></td>
                           <td className="p-2 text-center border-r"><input type="text" value={b.uom} onChange={e => handleTaskUpdates(b.id, {uom: e.target.value}, "masterBOQ")} className="w-full bg-slate-100 text-center rounded p-2 text-xs font-bold outline-none" /></td>
@@ -783,11 +788,11 @@
                   </div>
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-8 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll((db.l2Schedule || []).map(x=>x.id))} checked={selectedIds.length===(db.l2Schedule || []).length && (db.l2Schedule || []).length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Identification</th><th colSpan="3" className="p-3 text-center bg-blue-950 border-r border-slate-700">Start Target Engine</th><th colSpan="3" className="p-3 text-center bg-amber-950">Finish Target Engine</th><th className="p-3 w-8" rowSpan="2"></th></tr>
+                      <tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-8 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.l2Schedule).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.l2Schedule).length && ensureArray(db.l2Schedule).length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Identification</th><th colSpan="3" className="p-3 text-center bg-blue-950 border-r border-slate-700">Start Target Engine</th><th colSpan="3" className="p-3 text-center bg-amber-950">Finish Target Engine</th><th className="p-3 w-8" rowSpan="2"></th></tr>
                       <tr className="bg-slate-100 text-slate-700 text-[10px] uppercase sticky-th-sub"><th className="p-2 w-[8%]">Discipline</th><th className="p-2 w-[16%]">L2 Parent Name</th><th className="p-2 w-[12%] border-r border-slate-300">Sub-Front/Branch</th><th className="p-2 w-[8%] text-center">Base Start</th><th className="p-2 w-[8%] text-center text-ntpc-blue">Rev. Start</th><th className="p-2 w-[8%] text-center border-r border-slate-300 text-emerald-700">Act. Start</th><th className="p-2 w-[8%] text-center">Base Fin</th><th className="p-2 w-[8%] text-center text-ntpc-orange">Rev. Fin</th><th className="p-2 w-[8%] text-center text-emerald-700">Act. Fin</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(db.l2Schedule || []).map((l, i) => {
+                      {ensureArray(db.l2Schedule).map((l, i) => {
                         const status = getL2DelayStatus(l);
                         const rowDelayed = status.isStartOverdue || status.isFinishOverdue;
                         
@@ -833,21 +838,21 @@
 
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(activeTasks.map(x=>x.id))} checked={selectedIds.length===activeTasks.length && activeTasks.length>0}/></th><th colSpan="4" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase tracking-wider sticky-th"><th className="p-3 w-10 text-center" rowSpan="2"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(activeTasks).map(x=>x.id))} checked={selectedIds.length===ensureArray(activeTasks).length && ensureArray(activeTasks).length>0}/></th><th colSpan="3" className="p-3 text-center border-r border-slate-700">Front Identification</th><th colSpan="4" className="p-3 text-center border-r border-slate-700 bg-blue-950">Week #{weekNo} Performance</th><th colSpan="4" className="p-3 text-center bg-slate-950">Directives & Blockers</th><th className="p-3 w-10" rowSpan="2"></th></tr>
                       <tr className="bg-slate-100 text-slate-700 text-[11px] uppercase tracking-wider sticky-th-sub"><th className="p-3 w-[12%]">L2 Reference</th><th className="p-3 w-[10%]">Branch</th><th className="p-3 w-[12%]">Task Desc</th><th className="p-3 w-[4%] text-center border-r">Unit</th><th className="p-3 w-[6%] text-center text-blue-900">Plan</th><th className="p-3 w-[6%] text-center text-emerald-800">Actual</th><th className="p-3 w-[4%] text-center">Var.</th><th className="p-3 w-[6%] text-center border-r text-rose-700">Backlog</th><th className="p-3 w-[6%] text-center">Next</th><th className="p-3 w-[12%]">Hindrance</th><th className="p-3 w-[12%]">TPL Remarks</th><th className="p-3 w-[12%]">NTPC Directives</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {activeTasks.map((t) => {
+                      {ensureArray(activeTasks).map((t) => {
                         const variance = (parseFloat(t.act) || 0) - (parseFloat(t.plan) || 0);
                         const varColor = variance < 0 ? "text-rose-600 bg-rose-50" : variance > 0 ? "text-emerald-700 bg-emerald-50" : "text-slate-400";
                         const col = activeDiscipline === "Civil" ? "civilExecution" : activeDiscipline === "Mechanical" ? "mechExecution" : "elecExecution";
                         return (
                           <tr key={t.id} className={`hover:bg-slate-50 ${selectedIds.includes(t.id)?'bg-rose-50':''}`}>
-                            <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
+                            <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 cursor-pointer"/></td>
                             <td className="p-1.5"><select value={t.l2Ref} onChange={e => handleTaskUpdates(t.id, {l2Ref: e.target.value, subFront: ""}, col)} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                             <td className="p-1.5">
                               <input type="text" list={"branch-" + t.id} value={t.subFront} onChange={e => handleTaskUpdates(t.id, {subFront: e.target.value}, col)} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
-                              <datalist id={"branch-" + t.id}>{Array.from(new Set((db.l2Schedule || []).filter(l => l && l.desc === t.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
+                              <datalist id={"branch-" + t.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.desc === t.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                             </td>
                             <td className="p-1.5"><input type="text" list="standard-tasks" value={t.taskName} onChange={e => handleTaskUpdates(t.id, {taskName: e.target.value}, col)} className="w-full bg-transparent border-b p-1.5 font-bold text-[10px] outline-none focus:border-ntpc-orange" /></td>
                             <td className="p-1.5 text-center border-r"><input type="text" value={t.unit} onChange={e => handleTaskUpdates(t.id, {unit: e.target.value}, col)} className="w-8 bg-slate-100 text-center rounded p-1.5 text-[9px] font-bold outline-none" /></td>
@@ -858,7 +863,7 @@
                             <td className="p-1.5"><input type="number" value={t.next} onChange={e => handleTaskUpdates(t.id, {next: e.target.value}, col)} className="w-full bg-slate-100 text-center rounded p-1.5 text-[10px] font-bold outline-none" /></td>
                             <td className="p-1.5"><textarea rows="1" value={t.hindrance} onChange={e => handleTaskUpdates(t.id, {hindrance: e.target.value}, col)} className="w-full bg-amber-50/40 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
                             <td className="p-1.5"><textarea rows="1" value={t.tplRemarks} onChange={e => handleTaskUpdates(t.id, {tplRemarks: e.target.value}, col)} className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-[9px] outline-none font-medium"></textarea></td>
-                            <td className="p-1.5"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-rose-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
+                            <td className="p-1.5"><textarea rows="1" value={t.ntpcDirectives} onChange={e => handleTaskUpdates(t.id, {ntpcDirectives: e.target.value}, col)} className="w-full bg-rose-50/30 border border-slate-200 rounded p-1 text-[9px] font-bold text-rose-950 outline-none"></textarea></td>
                             <td className="p-2 text-center"><button onClick={()=>deleteIndividual(col, t.id)} className="text-rose-500 hover:text-rose-700 text-lg">🗑️</button></td>
                           </tr>
                         );
@@ -879,15 +884,15 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll((db.drawings || []).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===(db.drawings || []).filter(x=>x && x.weekNo===weekNo).length && (db.drawings || []).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).length && ensureArray(db.drawings).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">L2 Parent</th><th className="p-3 w-[8%] border-r border-slate-700">Branch</th><th className="p-3 w-[12%]">Drawing No</th><th className="p-3 w-[15%]">Description</th><th className="p-3 text-center w-[8%]">Priority</th><th className="p-3 text-center w-[9%]">Target Date</th><th className="p-3 text-center w-[10%]">Approval Status</th><th className="p-3 w-[12%]">Front Impact</th><th className="p-3 w-[10%]">Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(db.drawings || []).filter(d => d && d.weekNo === weekNo).map((d) => (
+                      {ensureArray(db.drawings).filter(d => d.weekNo === weekNo).map((d) => (
                         <tr key={d.id} className={`hover:bg-slate-50 ${selectedIds.includes(d.id)?'bg-rose-50':''}`}>
                           <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-1.5"><select value={d.l2Ref} onChange={e => handleTaskUpdates(d.id, {l2Ref: e.target.value, subFront: ""}, "drawings")} className="w-full bg-slate-100 rounded p-1.5 font-bold text-[9px] text-ntpc-blue outline-none cursor-pointer"><option value="">-- Select L2 --</option>{uniqueL2Parents.map(desc => <option key={desc} value={desc}>{desc}</option>)}</select></td>
                           <td className="p-1.5 border-r">
                             <input type="text" list={"dwg-branch-" + d.id} value={d.subFront} onChange={e => handleTaskUpdates(d.id, {subFront: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded text-[9px] font-bold outline-none" placeholder="Branch" />
-                            <datalist id={"dwg-branch-" + d.id}>{Array.from(new Set((db.l2Schedule || []).filter(l => l && l.desc === d.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
+                            <datalist id={"dwg-branch-" + d.id}>{Array.from(new Set(ensureArray(db.l2Schedule).filter(l => l.desc === d.l2Ref && l.subFront).map(l => l.subFront))).map(sub => <option key={sub} value={sub} />)}</datalist>
                           </td>
                           <td className="p-1.5"><input type="text" value={d.drawingNo} onChange={e => handleTaskUpdates(d.id, {drawingNo: e.target.value}, "drawings")} className="w-full bg-slate-100 p-1.5 rounded font-bold text-[10px] outline-none" /></td>
                           <td className="p-1.5"><input type="text" value={d.desc} onChange={e => handleTaskUpdates(d.id, {desc: e.target.value}, "drawings")} className="w-full bg-transparent border-b p-1.5 font-bold text-sm outline-none" /></td>
@@ -915,9 +920,9 @@
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-orange-600 uppercase tracking-wider">Safety Violations Log</h3></div>
                       <table className="w-full text-left text-sm">
-                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll((db.safetyLogs || []).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===(db.safetyLogs || []).filter(x=>x && x.weekNo===weekNo).length && (db.safetyLogs || []).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
+                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).length && ensureArray(db.safetyLogs).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
-                          {(db.safetyLogs || []).filter(s => s && s.weekNo === weekNo).map(s => (
+                          {ensureArray(db.safetyLogs).filter(s => s.weekNo === weekNo).map(s => (
                             <tr key={s.id} className={`hover:bg-slate-50 ${selectedIds.includes(s.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2 font-bold text-xs">{s.dept || "Site"}</td>
@@ -935,9 +940,9 @@
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><h3 className="text-sm font-black text-blue-600 uppercase tracking-wider">Quality (FQA) NCRs</h3></div>
                       <table className="w-full text-left text-sm">
-                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll((db.qualityLogs || []).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===(db.qualityLogs || []).filter(x=>x && x.weekNo===weekNo).length && (db.qualityLogs || []).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
+                        <thead><tr className="bg-ntpc-navy text-white text-[10px] uppercase sticky-th"><th className="p-2 w-8 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).length && ensureArray(db.qualityLogs).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-2 w-[15%]">Dept</th><th className="p-2 w-[25%]">Category</th><th className="p-2 w-[40%]">Observation</th><th className="p-2 text-center">Status</th><th className="p-2 w-8"></th></tr></thead>
                         <tbody className="divide-y divide-slate-100">
-                          {(db.qualityLogs || []).filter(q => q && q.weekNo === weekNo).map(q => (
+                          {ensureArray(db.qualityLogs).filter(q => q.weekNo === weekNo).map(q => (
                             <tr key={q.id} className={`hover:bg-slate-50 ${selectedIds.includes(q.id)?'bg-rose-50':''}`}>
                               <td className="p-2 text-center"><input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => toggleSelect(q.id)} className="w-4 h-4 cursor-pointer"/></td>
                               <td className="p-2 font-bold text-xs">{q.dept || "Site"}</td>
@@ -966,9 +971,9 @@
                     </div>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll((db.actions || []).filter(x=>x && x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===(db.actions || []).filter(x=>x && x.weekNo===weekNo).length && (db.actions || []).filter(x=>x && x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">Category</th><th className="p-3 w-[26%]">Action Item Description</th><th className="p-3 w-[10%]">Resp</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[10%]">Status</th><th className="p-3 w-[24%]">NTPC Remarks</th><th className="p-3 w-10"></th></tr></thead>
+                    <thead><tr className="bg-ntpc-navy text-white text-xs uppercase sticky-th"><th className="p-3 w-10 text-center"><input type="checkbox" onChange={e => toggleSelectAll(ensureArray(db.actions).filter(x=>x.weekNo===weekNo).map(x=>x.id))} checked={selectedIds.length===ensureArray(db.actions).filter(x=>x.weekNo===weekNo).length && ensureArray(db.actions).filter(x=>x.weekNo===weekNo).length>0}/></th><th className="p-3 w-[10%]">Category</th><th className="p-3 w-[26%]">Action Item Description</th><th className="p-3 w-[10%]">Resp</th><th className="p-3 text-center w-[10%]">Target Date</th><th className="p-3 text-center w-[10%]">Status</th><th className="p-3 w-[24%]">NTPC Remarks</th><th className="p-3 w-10"></th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(db.actions || []).filter(a => a && a.weekNo === weekNo).map(a => (
+                      {ensureArray(db.actions).filter(a => a.weekNo === weekNo).map(a => (
                         <tr key={a.id} className={`hover:bg-slate-50 ${selectedIds.includes(a.id)?'bg-rose-50':''}`}>
                           <td className="p-3 text-center"><input type="checkbox" checked={selectedIds.includes(a.id)} onChange={() => toggleSelect(a.id)} className="w-4 h-4 cursor-pointer"/></td>
                           <td className="p-2"><select value={a.category} onChange={e => handleTaskUpdates(a.id, {category: e.target.value}, "actions")} className="w-full bg-slate-100 rounded p-2 font-bold text-xs outline-none"><option>Execution</option><option>Engineering</option><option>Procurement</option><option>Clearance</option></select></td>
@@ -987,7 +992,34 @@
             </main>
           </div>
 
-          {/* MODALS */}
+          {/* CLOUD COMMAND HUB MODAL */}
+          {showCloudModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
+              <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-6 border-t-8 border-ntpc-navy">
+                <div className="text-center">
+                  <h3 className="text-xl font-black uppercase text-ntpc-navy mb-1">Cloud Command Hub</h3>
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Manual Synchronization Engine</p>
+                </div>
+                
+                <div className="space-y-3">
+                  <button onClick={handlePullFromCloud} disabled={cloudLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-3 transition">
+                    <span className="text-2xl">⬇️</span> 
+                    <div className="text-left leading-tight"><span>Pull Latest Data</span><span className="block text-[9px] text-emerald-200 opacity-80">Download current cloud state</span></div>
+                  </button>
+
+                  <button onClick={handlePushToCloud} disabled={cloudLoading} className="w-full bg-rose-600 hover:bg-rose-700 text-white p-4 rounded-xl font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-3 transition">
+                    <span className="text-2xl">⬆️</span> 
+                    <div className="text-left leading-tight"><span>Push My Changes</span><span className="block text-[9px] text-rose-200 opacity-80">Upload my current screen to cloud</span></div>
+                  </button>
+                </div>
+
+                {cloudLoading && <div className="text-center text-xs font-black text-ntpc-blue uppercase animate-pulse">{cloudLoading}</div>}
+                <button onClick={() => setShowCloudModal(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-lg text-xs font-black uppercase transition">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* OTHER MODALS */}
           {showTaskModal && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -997,12 +1029,12 @@
                 </div>
                 <div className="flex gap-2">
                   <input type="text" value={newTaskInput} onChange={e => setNewTaskInput(e.target.value)} placeholder="Type new standard task..." className="flex-1 border p-2 rounded text-xs font-bold outline-none" />
-                  <button onClick={() => { if(newTaskInput.trim() && !(db.standardTasks || []).includes(newTaskInput.trim())) { setDb(p=>({...p, standardTasks: [...(p.standardTasks || []), newTaskInput.trim()]})); setNewTaskInput(""); } }} className="bg-ntpc-orange text-white px-4 rounded text-xs font-black uppercase">Add</button>
+                  <button onClick={() => { if(newTaskInput.trim() && !ensureArray(db.standardTasks).includes(newTaskInput.trim())) { setDb(p=>({...p, standardTasks: [...ensureArray(p.standardTasks), newTaskInput.trim()]})); setNewTaskInput(""); } }} className="bg-ntpc-orange text-white px-4 rounded text-xs font-black uppercase">Add</button>
                 </div>
                 <div className="max-h-60 overflow-y-auto space-y-1 mt-2 pr-2 custom-scroll">
-                  {(db.standardTasks || []).map(t => (
+                  {ensureArray(db.standardTasks).map(t => (
                     <div key={t} className="flex justify-between items-center bg-slate-50 p-2 rounded border text-xs font-bold">
-                      {t} <button onClick={() => setDb(p=>({...p, standardTasks: (p.standardTasks || []).filter(x => x !== t)}))} className="text-rose-500 hover:text-rose-700">Delete</button>
+                      {t} <button onClick={() => setDb(p=>({...p, standardTasks: ensureArray(p.standardTasks).filter(x => x !== t)}))} className="text-rose-500 hover:text-rose-700">Delete</button>
                     </div>
                   ))}
                 </div>
@@ -1075,7 +1107,7 @@
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
               <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5">
                 <h3 className="text-lg font-black uppercase text-ntpc-blue">Configure A4 Print MoM</h3>
-                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Dashboard & BOQ</label>
+                <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludeDashboard} onChange={e => setPrintIncludeDashboard(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Dashboard & BOQ Summary</label>
                 <label className="flex items-center gap-3 text-sm font-bold cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200"><input type="checkbox" checked={printIncludePhotos} onChange={e => setPrintIncludePhotos(e.target.checked)} className="w-5 h-5 accent-ntpc-blue" />Include Safety/QA Photos</label>
                 <div className="flex gap-2">
                   <button onClick={() => setShowPrintModal(false)} className="flex-1 bg-slate-100 py-2.5 rounded-lg text-xs font-black uppercase hover:bg-slate-200">Cancel</button>
@@ -1089,12 +1121,7 @@
           {/* PROFESSIONAL A4 PORTRAIT MOM PRINT TEMPLATE */}
           {/* ========================================================= */}
           <div id="printable-mom" className="hidden print:block font-sans bg-white text-black">
-            
-            <div className="print-header-box">
-              <h1 className="print-title">Nabinagar Super Thermal Power Project</h1>
-              <div className="header-gradient-line"></div>
-            </div>
-
+            <div className="print-header-box"><h1 className="print-title">Nabinagar Super Thermal Power Project</h1><div className="header-gradient-line"></div></div>
             <div className="flex justify-between items-end mb-4 border-b border-black pb-2">
               <h2 className="text-[14px] font-black uppercase tracking-wider">Minutes of Weekly Review Meeting (WRM) — Week #{weekNo}</h2>
               <div className="text-[10px] font-bold text-right uppercase">REF: NTPC/NSTPP-II/WRM/WK-{weekNo}<br />Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
@@ -1105,8 +1132,8 @@
               <thead><tr><th className="w-[35%]">Employer (NTPC)</th><th className="w-[35%]">Contractor (M/s TPL)</th><th className="w-[30%] text-center">Site Operational Metrics</th></tr></thead>
               <tbody>
                 <tr>
-                  <td><ul className="list-disc pl-4 m-0">{(currentMeta.ntpcAttendees || []).map((a, i) => <li key={i}><strong>{a.name}</strong> — {a.desig}</li>)}</ul></td>
-                  <td><ul className="list-disc pl-4 m-0">{(currentMeta.tplAttendees || []).map((a, i) => <li key={i}><strong>{a.name}</strong> — {a.desig}</li>)}</ul></td>
+                  <td><ul className="list-disc pl-4 m-0">{ensureArray(currentMeta.ntpcAttendees).map((a, i) => <li key={i}><strong>{a.name}</strong> — {a.desig}</li>)}</ul></td>
+                  <td><ul className="list-disc pl-4 m-0">{ensureArray(currentMeta.tplAttendees).map((a, i) => <li key={i}><strong>{a.name}</strong> — {a.desig}</li>)}</ul></td>
                   <td className="font-bold text-center bg-[#f1f5f9] text-[12px] pt-4">Total Deployed Manpower: {currentMeta.manpower}<br/><br/>Total Persons Trained: {currentMeta.trained}</td>
                 </tr>
               </tbody>
@@ -1124,11 +1151,11 @@
                       <td className="text-center font-bold text-emerald-800">{getHitCount(elecWk)} / {elecWk.length}</td>
                       <td className="text-center font-bold">{pendingDwgs}</td>
                       <td className="text-center font-bold text-rose-700">{openActs}</td>
-                      <td className="text-center font-bold">{openHse + (db.qualityLogs || []).filter(q => q && q.weekNo === weekNo && q.status === "Open").length}</td>
+                      <td className="text-center font-bold">{openHse + ensureArray(db.qualityLogs).filter(q => q.weekNo === weekNo && q.status === "Open").length}</td>
                     </tr>
                   </tbody>
                 </table>
-
+                
                 {commoditySummary.length > 0 && (
                   <React.Fragment>
                     <h3 className="section-title">3. Site-Wide Commodity Progress</h3>
@@ -1172,7 +1199,7 @@
             <table>
               <thead><tr><th className="w-[30%]">Action Description</th><th className="w-[15%]">Resp</th><th className="text-center w-[15%]">Target</th><th className="text-center w-[10%]">Status</th><th className="w-[30%]">NTPC Review Directives</th></tr></thead>
               <tbody>
-                {(db.actions || []).filter(a => a && a.weekNo === weekNo).map((a, i) => (
+                {ensureArray(db.actions).filter(a => a.weekNo === weekNo).map((a, i) => (
                   <tr key={i}>
                     <td><strong>{a.desc}</strong></td><td>{a.responsibility}</td>
                     <td className="text-center font-bold">{a.targetDate}</td><td className="text-center font-bold uppercase">{a.status}</td>
@@ -1186,7 +1213,7 @@
             <table>
               <thead><tr><th className="w-[20%]">Dept & Category</th><th className="w-[50%]">Observation Detail</th><th className="text-center w-[15%]">Status</th>{printIncludePhotos && <th className="text-center w-[15%]">Evidence</th>}</tr></thead>
               <tbody>
-                {[...(db.safetyLogs || []), ...(db.qualityLogs || [])].filter(s => s && s.weekNo === weekNo).map((s, i) => (
+                {[...ensureArray(db.safetyLogs), ...ensureArray(db.qualityLogs)].filter(s => s.weekNo === weekNo).map((s, i) => (
                   <tr key={i}>
                     <td><strong>{s.dept || "Site"}</strong><br/>{s.category}</td>
                     <td>{s.desc}</td>
